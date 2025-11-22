@@ -36,12 +36,23 @@ export class BaseConfigBuilder {
                     const overrides = DeepCopy(obj);
                     delete overrides.proxies;
                     if (Object.keys(overrides).length > 0) {
-                        this.applyConfigOverrides(overrides);
+                        try {
+                            this.applyConfigOverrides(overrides);
+                        } catch (e) {
+                            console.warn('Failed to apply YAML overrides (heuristic path):', e?.message || e);
+                        }
                     }
+
                     for (const p of obj.proxies) {
-                        const proxy = convertYamlProxyToObject(p);
-                        if (proxy) parsedItems.push(proxy);
+                        try {
+                            const proxy = convertYamlProxyToObject(p);
+                            if (proxy) parsedItems.push(proxy);
+                        } catch (e) {
+                            console.warn('Skipping invalid YAML proxy (heuristic path):', e?.message || e);
+                            continue; // 单个节点坏了，不影响后续
+                        }
                     }
+
                     if (parsedItems.length > 0) return parsedItems;
                 }
             } catch (e) {
@@ -50,7 +61,10 @@ export class BaseConfigBuilder {
         }
 
         // If not clear YAML, only try whole-document decode if input looks base64-like
-        const isBase64Like = /^[A-Za-z0-9+/=\r\n]+$/.test(input) && input.replace(/[\r\n]/g, '').length % 4 === 0;
+        const isBase64Like =
+            /^[A-Za-z0-9+/=\r\n]+$/.test(input) &&
+            input.replace(/[\r\n]/g, '').length % 4 === 0;
+
         if (!looksLikeYaml && isBase64Like) {
             try {
                 const sanitized = input.replace(/\s+/g, '');
@@ -63,53 +77,98 @@ export class BaseConfigBuilder {
                             const overrides = DeepCopy(obj);
                             delete overrides.proxies;
                             if (Object.keys(overrides).length > 0) {
-                                this.applyConfigOverrides(overrides);
+                                try {
+                                    this.applyConfigOverrides(overrides);
+                                } catch (e) {
+                                    console.warn('Failed to apply overrides from decoded YAML:', e?.message || e);
+                                }
                             }
+
                             for (const p of obj.proxies) {
-                                const proxy = convertYamlProxyToObject(p);
-                                if (proxy) parsedItems.push(proxy);
+                                try {
+                                    const proxy = convertYamlProxyToObject(p);
+                                    if (proxy) parsedItems.push(proxy);
+                                } catch (e) {
+                                    console.warn('Skipping invalid proxy from decoded YAML:', e?.message || e);
+                                    continue;
+                                }
                             }
+
                             if (parsedItems.length > 0) return parsedItems;
                         }
                     } catch (e) {
                         // not YAML; fall through
                     }
                 }
-            } catch (_) { }
+            } catch (_) {
+                // base64 解码失败，忽略整段，继续走下面的逐行逻辑
+            }
         }
 
         // Otherwise, line-by-line processing (URLs, subscription content, remote lists, etc.)
-        const urls = input.split('\n').filter(url => url.trim() !== '');
+        const urls = input
+            .split('\n')
+            .map(line => line.trim())
+            .filter(line => line !== '');
+
         for (const url of urls) {
-            let processedUrls = tryDecodeSubscriptionLines(url);
+            let processedUrls;
+            try {
+                processedUrls = tryDecodeSubscriptionLines(url);
+            } catch (e) {
+                console.warn(`Skipping invalid subscription line: ${url}`, e);
+                continue; // 当前整行有问题，继续下一行
+            }
+
             if (!Array.isArray(processedUrls)) {
                 processedUrls = [processedUrls];
             }
 
             for (const processedUrl of processedUrls) {
+                if (!processedUrl) continue;
+
                 try {
                     const result = await ProxyParser.parse(processedUrl, this.userAgent);
+
+                    // 解析结果为一个 YAML 配置（含 proxies）
                     if (result && typeof result === 'object' && result.type === 'yamlConfig') {
                         if (result.config) {
-                            this.applyConfigOverrides(result.config);
+                            try {
+                                this.applyConfigOverrides(result.config);
+                            } catch (e) {
+                                console.warn('Failed to apply overrides from yamlConfig result:', e?.message || e);
+                            }
                         }
                         if (Array.isArray(result.proxies)) {
-                            result.proxies.forEach(proxy => {
-                                if (proxy && typeof proxy === 'object' && proxy.tag) {
-                                    parsedItems.push(proxy);
+                            for (const proxy of result.proxies) {
+                                try {
+                                    if (proxy && typeof proxy === 'object' && proxy.tag) {
+                                        parsedItems.push(proxy);
+                                    }
+                                } catch (e) {
+                                    console.warn('Skipping invalid proxy in yamlConfig result:', e?.message || e);
+                                    continue;
                                 }
-                            });
+                            }
                         }
-                        continue;
+                        continue; // 这一条 processedUrl 已经处理完
                     }
+
+                    // 解析结果是一个数组
                     if (Array.isArray(result)) {
                         for (const item of result) {
                             if (item && typeof item === 'object' && item.tag) {
                                 parsedItems.push(item);
                             } else if (typeof item === 'string') {
-                                const subResult = await ProxyParser.parse(item, this.userAgent);
-                                if (subResult) {
-                                    parsedItems.push(subResult);
+                                // 某些订阅会返回一组字符串节点，再次解析时单独保护
+                                try {
+                                    const subResult = await ProxyParser.parse(item, this.userAgent);
+                                    if (subResult) {
+                                        parsedItems.push(subResult);
+                                    }
+                                } catch (e) {
+                                    console.warn(`Skipping invalid nested proxy: ${item}`, e);
+                                    continue;
                                 }
                             }
                         }
@@ -120,7 +179,6 @@ export class BaseConfigBuilder {
                     console.warn(`Skipping invalid proxy: ${processedUrl}`, e);
                     continue; // 跳过错误节点，继续解析下一个
                 }
-
             }
         }
 
@@ -141,12 +199,17 @@ export class BaseConfigBuilder {
             if (blacklistedKeys.has(key)) {
                 return;
             }
-            if (value === undefined) {
-                delete this.config[key];
-                this.appliedOverrideKeys.add(key);
-            } else {
-                this.config[key] = DeepCopy(value);
-                this.appliedOverrideKeys.add(key);
+
+            try {
+                if (value === undefined) {
+                    delete this.config[key];
+                    this.appliedOverrideKeys.add(key);
+                } else {
+                    this.config[key] = DeepCopy(value);
+                    this.appliedOverrideKeys.add(key);
+                }
+            } catch (e) {
+                console.warn(`Failed to apply config override for key "${key}"`, e);
             }
         });
     }
@@ -212,21 +275,29 @@ export class BaseConfigBuilder {
     }
 
     addCustomItems(customItems) {
+        if (!Array.isArray(customItems) || customItems.length === 0) return;
+
         const validItems = customItems.filter(item => item != null);
-        validItems.forEach(item => {
+        for (const item of validItems) {
             if (item?.tag) {
-                const convertedProxy = this.convertProxy(item);
-                if (convertedProxy) {
-                    this.addProxyToConfig(convertedProxy);
+                try {
+                    const convertedProxy = this.convertProxy(item);
+                    if (convertedProxy) {
+                        this.addProxyToConfig(convertedProxy);
+                    }
+                } catch (e) {
+                    console.warn(`Skipping invalid custom item: ${item?.tag || '[no tag]'}`, e);
+                    continue;
                 }
             }
-        });
+        }
     }
 
     addSelectors() {
         const outbounds = this.getOutboundsList();
         const proxyList = this.getProxyList();
 
+        // 这些 group 构建属于整体结构问题，也可以在这里再做一层 try/catch。
         this.addAutoSelectGroup(proxyList);
         this.addNodeSelectGroup(proxyList);
         if (this.groupByCountry) {
