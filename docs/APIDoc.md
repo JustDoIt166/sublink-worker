@@ -1,217 +1,163 @@
-# Sublink Worker API 文档
+基于您提供的代码文件，特别是 `src/index.js`、`docs/APIDoc.md` 和各个 ConfigBuilder 文件，我为您整理了详细的 API 接口文档。
 
-## 概述
+这份文档专为程序调用设计，包含了所有支持的参数和数据结构。
 
-Sublink Worker 是一个部署在 Cloudflare Workers 上的轻量级订阅转换工具。它可以将各种代理协议的分享 URL 转换为不同客户端可用的订阅链接。本文档概述了 API 端点及其用法。
+# Sublink Worker API 接口文档
 
-## 基础 URL
+## 1\. 基础说明
 
-所有 API 请求应发送至:
+  - **Base URL**: `https://<你的Worker域名>`
+  - **请求方式**: 推荐使用 `GET` (转换配置) 和 `POST` (保存配置)。
+  - **编码**: 所有 URL 参数值（尤其是 `config`、`customRules` 等）必须经过 URL Encode 编码。
 
-```
-https://your-worker-domain.workers.dev
-```
+-----
 
-将 `your-worker-domain` 替换为您实际的 Cloudflare Workers 域名。
+## 2\. 核心转换接口
 
-## 端点
+用于将原始订阅链接转换为特定客户端的配置文件。
 
-### 1. 生成配置
+### 接口地址
 
-#### Sing-Box 配置
+  - **Sing-Box**: `/singbox`
+  - **Clash**: `/clash`
+  - **Surge**: `/surge`
+  - **Xray**: `/xray` (仅进行简单的 Base64 解码和合并)
 
-- **URL**: `/singbox`
-- **方法**: GET
-- **参数**:
-  - `config` (必需): URL 编码的字符串,包含一个或多个代理配置
-  - `selectedRules` (可选): 预定义规则集名称或自定义规则的 JSON 数组
-  - `customRules` (可选): 自定义规则的 JSON 数组
-  - `pin` (可选): 布尔值，是否将自定义规则置于预定义规则之上
-  - `configId` (可选): 字符串，使用保存的配置ID。详见[保存自定义配置](#4-保存自定义配置)
+### 请求参数 (Query Parameters)
 
-**示例**:
-```
-/singbox?config=vmess%3A%2F%2Fexample&selectedRules=balanced&customRules=%5B%7B%22site%22%3A%22example.com%22%2C%22ip%22%3A%22192.168.1.1%22%2C%22domain_suffix%22%3A%22.com%22%2C%22ip_cidr%22%3A%2210.0.0.0%2F8%22%2C%22name%22%3A%22MyCustomRule%22%7D%5D
-```
+| 参数名 | 必填 | 类型 | 默认值 | 描述 |
+| :--- | :---: | :--- | :--- | :--- |
+| `config` | **是** | String | - | **核心参数**。原始订阅链接或配置内容。支持多个链接用换行符 `\n` 分隔。需 URL 编码。 |
+| `ua` | 否 | String | `curl/7.74.0` | 请求原始订阅时使用的 User-Agent。 |
+| `lang` | 否 | String | `zh-CN` | 生成配置中注释或名称的语言。支持 `zh-CN`, `en-US`, `fa`, `ru`。 |
+| `selectedRules` | 否 | String | `minimal` | 预定义规则集名称（如 `balanced`）或规则名称的 JSON 数组字符串。 |
+| `customRules` | 否 | String | `[]` | 自定义规则的 JSON 数组字符串。详见下方数据结构。 |
+| `group_by_country`| 否 | Boolean| `false` | 是否将节点按国家分组（生成策略组）。传值为 `true` 开启。 |
+| `configId` | 否 | String | - | 使用之前通过 `/config` 接口保存的基础配置模板 ID。 |
 
-#### Clash 配置
+#### Clash / Sing-Box 专属高级参数
 
-- **URL**: `/clash`
-- **方法**: GET
-- **参数**: 与 Sing-Box 配置相同
+以下参数主要用于开启 Clash API 支持（方便使用面板）：
 
-#### Xray 配置
+| 参数名 | 适用客户端 | 描述 |
+| :--- | :--- | :--- |
+| `enable_clash_ui` | Clash, Singbox | `true` 开启 Clash API 支持。 |
+| `external_controller`| Clash, Singbox | 自定义外部控制器地址，例如 `0.0.0.0:9090`。 |
+| `external_ui_download_url`| Clash, Singbox | 自定义 Dashboard UI 的下载地址。 |
 
-- **URL**: `/xray`
-- **方法**: GET
-- **参数**:
-  - `config` (必需): URL 编码的字符串,包含一个或多个代理配置
+### 响应内容
 
-### 2. 缩短 URL
+  - **Content-Type**:
+      - Sing-Box: `application/json`
+      - Clash: `text/yaml`
+      - Surge/Xray: `text/plain`
+  - **Body**: 转换后的完整配置文件内容。
 
-- **URL**: `/shorten`
-- **方法**: GET
-- **参数**:
-  - `url` (必需): 需要缩短的原始 URL
+-----
 
-**示例**:
-```
-/shorten?url=https%3A%2F%2Fexample.com%2Fvery-long-url
-```
+## 3\. 辅助功能接口
 
-**响应**:
-```json
-{
-  "shortUrl": "https://your-worker-domain.workers.dev/s/abcdefg"
-}
-```
+### 3.1 短链接生成
 
-### 3. 重定向短 URL
+将长 URL 转换为短链接。
 
-- **URL**: `/s/{shortCode}`
-- **方法**: GET
-- **描述**: 重定向到与短代码关联的原始 URL
+  - **URL**: `/shorten`
+  - **Method**: `GET`
+  - **参数**: `url` (原始长链接)
+  - **响应**:
+    ```json
+    { "shortUrl": "https://<domain>/s/<id>" }
+    ```
 
-### 4. 保存自定义配置
+### 3.2 保存基础配置
 
-- **URL**: `/config`
-- **方法**: POST
-- **Content-Type**: application/json
-- **请求体**:
+上传自定义的基础配置模板（如自定义的 DNS、Inbounds 等），返回一个 ID 供转换时使用。
 
-  ```json
-  {
-    "type": "clash" | "singbox",  // 配置类型
-    "content": "配置内容"  // 字符串格式的配置内容
-  }
-  ```
+  - **URL**: `/config`
+  - **Method**: `POST`
+  - **Headers**: `Content-Type: application/json`
+  - **Body**:
+    ```json
+    {
+      "type": "singbox",  // 或 "clash"
+      "content": "..."    // JSON 字符串或 YAML 字符串
+    }
+    ```
+  - **响应**: `String` (配置 ID，例如 `singbox_a1b2c3d4`)
 
-- **响应**: 
-  - 成功: 返回配置ID (字符串)
-  - 失败: 返回错误信息 (400 状态码)
+-----
 
-**说明**:
-- 配置内容会进行格式验证
-- Clash配置支持YAML和JSON格式
-- SingBox配置必须是有效的JSON格式
-- 配置将保存30天
-- 配置ID可以通过URL参数`configId`使用
+## 4\. 数据结构详解
 
-**示例**:
+### 4.1 `selectedRules` (预定义规则)
 
-``` bash
-curl -X POST https://your-worker-domain.workers.dev/config \
--H "Content-Type: application/json" \
--d '{
-"type": "clash",
-"content": "port: 7890\nallow-lan: false\nmode: Rule"
-}'
-```
+可以是以下字符串之一，也可以是规则名称的 JSON 数组：
 
-**使用保存的配置**:
-将返回的配置ID添加到URL参数中即可使用保存的配置：
-```
-https://your-worker-domain.workers.dev/clash?config=vmess://xxx&configId=clash_abc123
-```
+  - `minimal`: 包含 Location:CN, Private, Non-China
+  - `balanced`: 包含 minimal 加上 Google, Youtube, Github, AI Services, Telegram
+  - `comprehensive`: 包含所有可用规则。
 
-详情请参考[使用说明](#使用说明)
+**可用规则名称列表**:
+`Ad Block`, `AI Services`, `Bilibili`, `Youtube`, `Google`, `Private`, `Location:CN`, `Telegram`, `Github`, `Microsoft`, `Apple`, `Social Media`, `Streaming`, `Gaming`, `Education`, `Financial`, `Cloud Services`, `Non-China`.
 
-## 预定义规则集
+### 4.2 `customRules` (自定义规则)
 
-API 支持以下预定义规则集:
+这是一个 JSON 对象的数组，序列化为字符串后传入。自定义规则会被置顶。
 
-- `minimal`: 基本规则集
-- `balanced`: 适中规则集
-- `comprehensive`: 完整规则集
-
-这些可以在 Sing-Box 和 Clash 配置的 `selectedRules` 参数中使用。
-
-下面是目前支持的预定义规则集：
-
-| Rule Name | Used Site Rules | Used IP Rules |
-|---|---|---|
-| Ad Block | category-ads-all |  |
-| AI Services | category-ai-!cn |  |
-| Bilibili | bilibili |  |
-| Youtube | youtube |  |
-| Google | google | google |
-| Private |  | private |
-| Location:CN | geolocation-cn | cn |
-| Telegram |  | telegram |
-| Microsoft | microsoft |  |
-| Apple | apple |  |
-| Bahamut | bahamut |  |
-| Social Media | facebook, instagram, twitter, tiktok, linkedin |  |
-| Streaming | netflix, hulu, disney, hbo, amazon |  |
-| Gaming | steam, epicgames, ea, ubisoft, blizzard |  |
-| Github | github, gitlab |  |
-| Education | coursera, edx, udemy, khanacademy, category-scholar-!cn |  |
-| Financial | paypal, visa, mastercard, stripe, wise |  |
-| Cloud Services | aws, azure, digitalocean, heroku, dropbox |  |
-
-Singbox 的规则集来自 [https://github.com/lyc8503/sing-box-rules](https://github.com/lyc8503/sing-box-rules), 感谢 lyc8503 的贡献!
-
-## 自定义规则
-
-除了使用预定义规则集,您还可以在 `customRules` 参数中提供自定义规则列表作为 JSON 数组。每个自定义规则应包含以下字段:
-
-- `site`: 域名规则，逗号分隔的字符串
-- `ip`: IP 规则，逗号分隔的字符串
-- `domain_suffix`: 域名后缀规则，逗号分隔的字符串
-- `domain_keyword`: 域名关键词规则，逗号分隔的字符串
-- `ip_cidr`: IP CIDR 规则，逗号分隔的字符串
-- `protocol`: 协议规则，逗号分隔的字符串
-- `name`: 出站名称
-
-示例:
+**JSON 结构示例**:
 
 ```json
 [
   {
-    "site": "google,anthropic",
-    "ip": "private,cn",
-    "domain_suffix": ".com,.org",
-    "domain_keyword": "Mijia Cloud,push.apple",
-    "ip_cidr": "192.168.0.0/16,10.0.0.0/8",
-    "protocol": "http,tls,dns",
-    "name": "🤪 MyCustomRule"
+    "name": "我的自定义规则",
+    "site": "google,anthropic",        // Geo-Site 规则，逗号分隔
+    "ip": "private,cn",                // Geo-IP 规则，逗号分隔
+    "domain_suffix": ".com,.org",      // 域名后缀
+    "domain_keyword": "keyword",       // 域名关键字
+    "ip_cidr": "10.0.0.0/8",           // IP CIDR
+    "protocol": "http,ssh"             // 协议类型 (Sing-Box专用)
   }
 ]
 ```
-您还可以使用 `pin` 参数将自定义规则置于预定义规则之上，以便自定义规则生效。
 
-## 错误处理
+-----
 
-API 在出现问题时将返回适当的 HTTP 状态码和错误消息:
+## 5\. 调用示例 (Python)
 
-- 400 Bad Request: 当缺少必需参数或参数无效时
-- 404 Not Found: 当请求的资源(如短 URL)不存在时
-- 500 Internal Server Error: 服务器端错误
+```python
+import requests
+import json
+import urllib.parse
 
-## 使用说明
+base_url = "https://your-worker.workers.dev"
 
-1. `config` 参数中的所有代理配置应进行 URL 编码。
-2. 可以在单个请求中包含多个代理配置,方法是在 URL 编码的 `config` 参数中用换行符 (`%0A`) 分隔它们。
-3. 使用自定义规则时,确保规则名称与自定义规则部分列出的名称完全匹配。
-4. 缩短的 URL 旨在临时使用,可能在一定时间后过期。
+# 1. 准备参数
+source_url = "vmess://......\nss://......" # 原始订阅
+custom_rules = [
+    {
+        "name": "Company Direct",
+        "domain_suffix": "company.com",
+        "site": "google"
+    }
+]
 
-## 示例
+params = {
+    "config": source_url,
+    "ua": "clash.meta",
+    "selectedRules": "balanced", # 使用平衡规则集
+    "customRules": json.dumps(custom_rules), # 自定义规则需转为JSON字符串
+    "group_by_country": "true",
+    "lang": "zh-CN"
+}
 
-1. 生成带有平衡规则集的 Sing-Box 配置:
-   ```
-   /singbox?config=vmess%3A%2F%2Fexample&selectedRules=balanced
-   ```
+# 2. 发起 Sing-Box 转换请求
+# 注意：requests 库会自动处理 URL 编码
+response = requests.get(f"{base_url}/singbox", params=params)
 
-2. 生成带有置顶自定义规则的 Clash 配置:
-   ```
-   /clash?config=vless%3A%2F%2Fexample&customRules=%5B%7B%22site%22%3A%22example.com%22%2C%22ip%22%3A%22192.168.1.1%22%2C%22domain_suffix%22%3A%22.com%22%2C%22domain_keyword%22%3A%22Mijia%20Cloud%22%2C%22ip_cidr%22%3A%2210.0.0.0%2F8%22%2C%22name%22%3A%22MyCustomRule%22%7D%5D&pin=true
-   ```
-
-3. 缩短 URL:
-   ```
-   /shorten?url=https%3A%2F%2Fyour-worker-domain.workers.dev%2Fsingbox%3Fconfig%3Dvmess%253A%252F%252Fexample%26selectedRules%3Dbalanced
-   ```
-
-## 结论
-
-Sublink Worker API 提供了一种灵活而强大的方式来生成和管理代理配置。它支持多种代理协议、各种客户端类型和可自定义的路由规则。URL 缩短功能允许轻松共享和管理复杂的配置。
+if response.status_code == 200:
+    print("转换成功!")
+    print(response.text) # 输出 JSON 配置
+else:
+    print(f"转换失败: {response.status_code}")
+    print(response.text)
+```
