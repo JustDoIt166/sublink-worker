@@ -75,7 +75,7 @@ export class BaseConfigBuilder {
                         // not YAML; fall through
                     }
                 }
-            } catch (_) {}
+            } catch (_) { }
         }
 
         // Otherwise, line-by-line processing (URLs, subscription content, remote lists, etc.)
@@ -87,34 +87,40 @@ export class BaseConfigBuilder {
             }
 
             for (const processedUrl of processedUrls) {
-                const result = await ProxyParser.parse(processedUrl, this.userAgent);
-                if (result && typeof result === 'object' && result.type === 'yamlConfig') {
-                    if (result.config) {
-                        this.applyConfigOverrides(result.config);
+                try {
+                    const result = await ProxyParser.parse(processedUrl, this.userAgent);
+                    if (result && typeof result === 'object' && result.type === 'yamlConfig') {
+                        if (result.config) {
+                            this.applyConfigOverrides(result.config);
+                        }
+                        if (Array.isArray(result.proxies)) {
+                            result.proxies.forEach(proxy => {
+                                if (proxy && typeof proxy === 'object' && proxy.tag) {
+                                    parsedItems.push(proxy);
+                                }
+                            });
+                        }
+                        continue;
                     }
-                    if (Array.isArray(result.proxies)) {
-                        result.proxies.forEach(proxy => {
-                            if (proxy && typeof proxy === 'object' && proxy.tag) {
-                                parsedItems.push(proxy);
-                            }
-                        });
-                    }
-                    continue;
-                }
-                if (Array.isArray(result)) {
-                    for (const item of result) {
-                        if (item && typeof item === 'object' && item.tag) {
-                            parsedItems.push(item);
-                        } else if (typeof item === 'string') {
-                            const subResult = await ProxyParser.parse(item, this.userAgent);
-                            if (subResult) {
-                                parsedItems.push(subResult);
+                    if (Array.isArray(result)) {
+                        for (const item of result) {
+                            if (item && typeof item === 'object' && item.tag) {
+                                parsedItems.push(item);
+                            } else if (typeof item === 'string') {
+                                const subResult = await ProxyParser.parse(item, this.userAgent);
+                                if (subResult) {
+                                    parsedItems.push(subResult);
+                                }
                             }
                         }
+                    } else if (result) {
+                        parsedItems.push(result);
                     }
-                } else if (result) {
-                    parsedItems.push(result);
+                } catch (e) {
+                    console.warn(`Skipping invalid proxy: ${processedUrl}`, e);
+                    continue; // 跳过错误节点，继续解析下一个
                 }
+
             }
         }
 
