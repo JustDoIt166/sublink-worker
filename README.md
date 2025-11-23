@@ -58,6 +58,12 @@ npm run deploy
 - Various predefined rule sets
 - Customizable policy groups for geo-site, geo-ip, ip-cidr, and domain-suffix
 
+## 🛠️ Admin Panel
+
+- Configure an admin token (for example, add `ADMIN_TOKEN = "<your-secret>"` under `[vars]` in `wrangler.toml`).
+- Visit `/admin` to authenticate and visually manage named base configuration templates for SingBox, Clash, and Surge.
+- Saved templates persist without expiration and can be referenced via the base configuration name field in the main UI.
+
 ## 📖 API Documentation
 
 For detailed API documentation, please refer to [APIDoc.md](/docs/APIDoc.md)
