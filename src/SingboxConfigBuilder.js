@@ -213,16 +213,18 @@ export class SingboxConfigBuilder extends BaseConfigBuilder {
 
         this.config.route.rule_set = [...site_rule_sets, ...ip_rule_sets];
 
-        rules.filter(rule => !!rule.domain_suffix || !!rule.domain_keyword).map(rule => {
+        // 修改：增加 .length > 0 的判断
+        rules.filter(rule => (rule.domain_suffix && rule.domain_suffix.length > 0) || (rule.domain_keyword && rule.domain_keyword.length > 0)).map(rule => {
             this.config.route.rules.push({
-                domain_suffix: rule.domain_suffix,
-                domain_keyword: rule.domain_keyword,
+                // 仅当数组不为空时才添加该字段，避免生成空数组字段
+                ...(rule.domain_suffix && rule.domain_suffix.length > 0 ? { domain_suffix: rule.domain_suffix } : {}),
+                ...(rule.domain_keyword && rule.domain_keyword.length > 0 ? { domain_keyword: rule.domain_keyword } : {}),
                 protocol: rule.protocol,
                 outbound: t(`outboundNames.${rule.outbound}`)
             });
         });
 
-        rules.filter(rule => !!rule.site_rules[0]).map(rule => {
+        rules.filter(rule => rule.site_rules && rule.site_rules.length > 0 && rule.site_rules[0] !== '').map(rule => {
             this.config.route.rules.push({
                 rule_set: [
                     ...(rule.site_rules.length > 0 && rule.site_rules[0] !== '' ? rule.site_rules : []),
@@ -232,7 +234,7 @@ export class SingboxConfigBuilder extends BaseConfigBuilder {
             });
         });
 
-        rules.filter(rule => !!rule.ip_rules[0]).map(rule => {
+        rules.filter(rule => rule.ip_rules && rule.ip_rules.length > 0 && rule.ip_rules[0] !== '').map(rule => {
             this.config.route.rules.push({
                 rule_set: [
                     ...(rule.ip_rules.filter(ip => ip.trim() !== '').map(ip => `${ip}-ip`))
@@ -242,7 +244,8 @@ export class SingboxConfigBuilder extends BaseConfigBuilder {
             });
         });
 
-        rules.filter(rule => !!rule.ip_cidr).map(rule => {
+        // 修改：增加 .length > 0 的判断
+        rules.filter(rule => rule.ip_cidr && rule.ip_cidr.length > 0).map(rule => {
             this.config.route.rules.push({
                 ip_cidr: rule.ip_cidr,
                 protocol: rule.protocol,
