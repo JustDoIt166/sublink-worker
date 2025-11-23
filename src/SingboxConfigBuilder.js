@@ -113,6 +113,12 @@ export class SingboxConfigBuilder extends BaseConfigBuilder {
     addCustomRuleGroups(proxyList) {
         if (Array.isArray(this.customRules)) {
             this.customRules.forEach(rule => {
+                // 修复：检查 tag 是否已存在，防止重复创建导致 Singbox 报错
+                const exists = this.config.outbounds.some(o => o && o.tag === rule.name);
+                if (exists) {
+                    return;
+                }
+
                 const selectorMembers = this.buildSelectorMembers(proxyList);
                 this.config.outbounds.push({
                     type: "selector",
