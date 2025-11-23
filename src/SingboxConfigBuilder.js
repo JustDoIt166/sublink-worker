@@ -260,6 +260,8 @@ export class SingboxConfigBuilder extends BaseConfigBuilder {
         });
 
         this.config.route.rules.unshift(
+            // 必须使用 "inbound" 匹配，因为这不需要等待嗅探结果，能立即阻止 TCP 回环
+            { inbound: "dns-in", action: "hijack-dns" },
             { clash_mode: 'direct', outbound: 'DIRECT' },
             { clash_mode: 'global', outbound: t('outboundNames.Node Select') },
             { action: 'sniff' },
