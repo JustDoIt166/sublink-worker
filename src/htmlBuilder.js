@@ -528,9 +528,20 @@ const generateBaseConfigSection = () => `
       </span>
     </div>
     <div class="mb-3">
+      <label class="form-label" for="configName">${t('configNameLabel')}</label>
+      <input
+        type="text"
+        class="form-control"
+        id="configName"
+        maxlength="64"
+        placeholder="${t('configNamePlaceholder')}"
+      >
+    </div>
+    <div class="mb-3">
       <select class="form-select" id="configType">
         <option value="singbox">SingBox (JSON)</option>
         <option value="clash">Clash (YAML)</option>
+        <option value="surge">Surge (INI)</option>
       </select>
     </div>
     <div class="mb-3">
@@ -647,6 +658,7 @@ const submitFormFunction = () => `
     // Save configEditor and configType to localStorage
     localStorage.setItem('configEditor', document.getElementById('configEditor').value);
     localStorage.setItem('configType', document.getElementById('configType').value);
+    localStorage.setItem('configName', document.getElementById('configName').value.trim());
     
     let selectedRules;
     const predefinedRules = document.getElementById('predefinedRules').value;
@@ -658,20 +670,24 @@ const submitFormFunction = () => `
     }
     
     const configEditor = document.getElementById('configEditor');
-    const configId = new URLSearchParams(window.location.search).get('configId') || '';
+    const searchParams = new URLSearchParams(window.location.search);
+    const configId = searchParams.get('configId') || '';
+    const configName = document.getElementById('configName').value.trim() || searchParams.get('configName') || '';
 
     const customRules = parseCustomRules();
 
     const configParam = configId ? \`&configId=\${configId}\` : '';
+    const configNameParam = configName ? \`&configName=\${encodeURIComponent(configName)}\` : '';
     const groupByCountryParam = groupByCountry ? '&group_by_country=true' : '';
     const clashUiParam = clashUIEnabled ? '&enable_clash_ui=true' : '';
     const externalControllerParam = externalController ? \`&external_controller=\${encodeURIComponent(externalController)}\` : '';
     const externalUiDownloadUrlParam = externalUiDownloadUrl ? \`&external_ui_download_url=\${encodeURIComponent(externalUiDownloadUrl)}\` : '';
     const clashUiQuery = \`\${clashUiParam}\${externalControllerParam}\${externalUiDownloadUrlParam}\`;
-    const xrayUrl = \`\${window.location.origin}/xray?config=\${encodeURIComponent(inputString)}&ua=\${encodeURIComponent(userAgent)}\${configParam}\${groupByCountryParam}\`;
-    const singboxUrl = \`\${window.location.origin}/singbox?config=\${encodeURIComponent(inputString)}&ua=\${encodeURIComponent(userAgent)}&selectedRules=\${encodeURIComponent(JSON.stringify(selectedRules))}&customRules=\${encodeURIComponent(JSON.stringify(customRules))}\${configParam}\${groupByCountryParam}\${clashUiQuery}\`;
-    const clashUrl = \`\${window.location.origin}/clash?config=\${encodeURIComponent(inputString)}&ua=\${encodeURIComponent(userAgent)}&selectedRules=\${encodeURIComponent(JSON.stringify(selectedRules))}&customRules=\${encodeURIComponent(JSON.stringify(customRules))}\${configParam}\${groupByCountryParam}\${clashUiQuery}\`;
-    const surgeUrl = \`\${window.location.origin}/surge?config=\${encodeURIComponent(inputString)}&ua=\${encodeURIComponent(userAgent)}&selectedRules=\${encodeURIComponent(JSON.stringify(selectedRules))}&customRules=\${encodeURIComponent(JSON.stringify(customRules))}\${configParam}\${groupByCountryParam}\`;
+    const configIdentifiers = \`\${configParam}\${configNameParam}\`;
+    const xrayUrl = \`\${window.location.origin}/xray?config=\${encodeURIComponent(inputString)}&ua=\${encodeURIComponent(userAgent)}\${configIdentifiers}\${groupByCountryParam}\`;
+    const singboxUrl = \`\${window.location.origin}/singbox?config=\${encodeURIComponent(inputString)}&ua=\${encodeURIComponent(userAgent)}&selectedRules=\${encodeURIComponent(JSON.stringify(selectedRules))}&customRules=\${encodeURIComponent(JSON.stringify(customRules))}\${configIdentifiers}\${groupByCountryParam}\${clashUiQuery}\`;
+    const clashUrl = \`\${window.location.origin}/clash?config=\${encodeURIComponent(inputString)}&ua=\${encodeURIComponent(userAgent)}&selectedRules=\${encodeURIComponent(JSON.stringify(selectedRules))}&customRules=\${encodeURIComponent(JSON.stringify(customRules))}\${configIdentifiers}\${groupByCountryParam}\${clashUiQuery}\`;
+    const surgeUrl = \`\${window.location.origin}/surge?config=\${encodeURIComponent(inputString)}&ua=\${encodeURIComponent(userAgent)}&selectedRules=\${encodeURIComponent(JSON.stringify(selectedRules))}&customRules=\${encodeURIComponent(JSON.stringify(customRules))}\${configIdentifiers}\${groupByCountryParam}\`;
     document.getElementById('xrayLink').value = xrayUrl;
     document.getElementById('singboxLink').value = singboxUrl;
     document.getElementById('clashLink').value = clashUrl;
@@ -782,11 +798,24 @@ const submitFormFunction = () => `
         document.getElementById('enableClashUI').checked = true;
       }
 
+      const configName = params.get('configName');
+      if (configName) {
+        document.getElementById('configName').value = configName;
+      }
+
       // Parse configuration ID
       const configId = params.get('configId');
-      if (configId) {
+      if (configId || configName) {
+        const fetchParams = new URLSearchParams({ type: 'singbox' });
+        if (configId) {
+          fetchParams.set('id', configId);
+        }
+        if (configName) {
+          fetchParams.set('name', configName);
+        }
+
         // Fetch configuration content
-        fetch(\`/config?type=singbox&id=\${configId}\`)
+        fetch(\`/config?\${fetchParams.toString()}\`)
           .then(response => response.json())
           .then(data => {
             if (data.content) {
@@ -915,12 +944,16 @@ const submitFormFunction = () => `
     // Load configEditor and configType
     const savedConfig = localStorage.getItem('configEditor');
     const savedConfigType = localStorage.getItem('configType');
-    
+    const savedConfigName = localStorage.getItem('configName');
+
     if (savedConfig) {
       document.getElementById('configEditor').value = savedConfig;
     }
     if (savedConfigType) {
       document.getElementById('configType').value = savedConfigType;
+    }
+    if (savedConfigName) {
+      document.getElementById('configName').value = savedConfigName;
     }
     
     const savedCustomPath = localStorage.getItem('customPath');
@@ -961,8 +994,9 @@ const submitFormFunction = () => `
     localStorage.removeItem('advancedToggle');
     localStorage.removeItem('selectedRules');
     localStorage.removeItem('predefinedRules');
-    localStorage.removeItem('configEditor'); 
+    localStorage.removeItem('configEditor');
     localStorage.removeItem('configType');
+    localStorage.removeItem('configName');
     localStorage.removeItem('userAgent');
     localStorage.removeItem('groupByCountry');
     localStorage.removeItem('enableClashUI');
@@ -977,7 +1011,8 @@ const submitFormFunction = () => `
     document.getElementById('externalController').value = '';
     document.getElementById('externalUiDownloadUrl').value = '';
     document.getElementById('configEditor').value = '';
-    document.getElementById('configType').value = 'singbox'; 
+    document.getElementById('configName').value = '';
+    document.getElementById('configType').value = 'singbox';
     document.getElementById('customUA').value = '';
     
     localStorage.removeItem('customPath');
@@ -1459,30 +1494,45 @@ const saveConfig = () => `
   function saveConfig() {
     const configEditor = document.getElementById('configEditor');
     const configType = document.getElementById('configType').value;
+    const configName = document.getElementById('configName').value.trim();
     const config = configEditor.value;
 
     localStorage.setItem('configEditor', config);
     localStorage.setItem('configType', configType);
-    
-    fetch('/config?type=' + configType, {
+    localStorage.setItem('configName', configName);
+
+    fetch('/config', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'Accept': 'application/json'
       },
       body: JSON.stringify({
         type: configType,
-        content: config
+        content: config,
+        name: configName
       })
     })
     .then(response => {
       if (!response.ok) {
         throw new Error('Failed to save configuration');
       }
+      const contentType = response.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        return response.json();
+      }
       return response.text();
     })
-    .then(configId => {
+    .then(data => {
+      const configId = typeof data === 'string' ? data : data.id;
+      const savedName = typeof data === 'string' ? configName : data.name;
       const currentUrl = new URL(window.location.href);
-      currentUrl.searchParams.set('configId', configId);
+      if (configId) {
+        currentUrl.searchParams.set('configId', configId);
+      }
+      if (savedName) {
+        currentUrl.searchParams.set('configName', savedName);
+      }
       window.history.pushState({}, '', currentUrl);
       alert('Configuration saved successfully!');
     })
@@ -1497,7 +1547,10 @@ const clearConfig = () => `
     document.getElementById('configEditor').value = '';
     const currentUrl = new URL(window.location.href);
     currentUrl.searchParams.delete('configId');
+    currentUrl.searchParams.delete('configName');
     window.history.pushState({}, '', currentUrl);
     localStorage.removeItem('configEditor');
+    localStorage.removeItem('configName');
+    document.getElementById('configName').value = '';
   }
 `;
