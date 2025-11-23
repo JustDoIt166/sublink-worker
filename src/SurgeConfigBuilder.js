@@ -5,9 +5,11 @@ import { t } from './i18n/index.js';
 
 export class SurgeConfigBuilder extends BaseConfigBuilder {
     constructor(inputString, selectedRules, customRules, baseConfig, lang, userAgent, groupByCountry) {
-        if (!baseConfig) {
-            baseConfig = SURGE_CONFIG;
-        }
+        // Not yet implemented, set aside for later use ;)
+        // if (!baseConfig) {
+        //     baseConfig = SURGE_CONFIG;
+        // }
+        baseConfig = SURGE_CONFIG;
         super(inputString, baseConfig, lang, userAgent, groupByCountry);
         this.selectedRules = selectedRules;
         this.customRules = customRules;
