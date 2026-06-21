@@ -13,6 +13,8 @@ const plainClashYaml = `proxies:
     password: test123
 `;
 
+const vlessWithEchDnsQuery = 'vless://ba209999-0c6c-11d2-97cf-00c04f8eea45@cloudflare.182682.xyz:443?encryption=none&security=tls&sni=cfnew.hellotime.de5.net&fp=chrome&type=ws&host=cfnew.hellotime.de5.net&path=%2F%3Fed%3D2048&ech=cloudflare-ech.com%2Bhttps%3A%2F%2F223.5.5.5%2Fdns-query#%E4%BC%98%E9%80%89%E5%9F%9F%E5%90%8D-01';
+
 function mockFetchText(text) {
     vi.stubGlobal('fetch', vi.fn(async () => ({
         ok: true,
@@ -57,6 +59,43 @@ describe('Issues #370/#373/#277 - remote subscription decode and empty Clash out
         expect(result.format).toBe('clash');
         expect(result.content).toBe(plainClashYaml.trim());
         expect(result.content).toContain('HK-Plain');
+    });
+
+    it('does not URL-decode protocol URI internals after Base64 subscription decoding', async () => {
+        mockFetchText(encodeBase64(vlessWithEchDnsQuery));
+
+        const builder = new ClashConfigBuilder(
+            'https://example.com/base64-uri-list',
+            'minimal',
+            [],
+            null,
+            'zh-CN',
+            'test-agent'
+        );
+        const built = yaml.load(await builder.build());
+
+        const proxy = built.proxies.find(item => item.name === '优选域名-01');
+        expect(proxy).toMatchObject({
+            type: 'vless',
+            server: 'cloudflare.182682.xyz',
+            uuid: 'ba209999-0c6c-11d2-97cf-00c04f8eea45',
+            servername: 'cfnew.hellotime.de5.net'
+        });
+    });
+
+    it('parses protocol URI names when query parameters already contain decoded URLs', async () => {
+        const decodedLine = decodeURIComponent(vlessWithEchDnsQuery);
+        const builder = new ClashConfigBuilder(
+            decodedLine,
+            'minimal',
+            [],
+            null,
+            'zh-CN',
+            'test-agent'
+        );
+        const built = yaml.load(await builder.build());
+
+        expect(built.proxies.some(item => item.name === '优选域名-01')).toBe(true);
     });
 
     it('uses a plain Clash subscription URL as provider instead of emitting empty url-test groups', async () => {

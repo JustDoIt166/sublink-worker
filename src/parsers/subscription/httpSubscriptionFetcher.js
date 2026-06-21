@@ -38,6 +38,14 @@ function decodeUriComponentIfNeeded(text) {
     }
 }
 
+function decodeWholePayloadIfNeeded(text) {
+    const trimmed = text.trim();
+    if (isPlainSubscriptionContent(trimmed)) {
+        return trimmed;
+    }
+    return decodeUriComponentIfNeeded(trimmed);
+}
+
 function normalizeBase64Candidate(text) {
     const compact = text.replace(/\s+/g, '');
     if (!compact || !/^[A-Za-z0-9+/_-]*={0,2}$/.test(compact)) {
@@ -62,7 +70,7 @@ function normalizeBase64Candidate(text) {
  * @returns {string} - Decoded content
  */
 function decodeContent(text) {
-    const urlDecodedText = decodeUriComponentIfNeeded(text);
+    const urlDecodedText = decodeWholePayloadIfNeeded(text);
     if (isPlainSubscriptionContent(urlDecodedText)) {
         return urlDecodedText;
     }
@@ -73,7 +81,12 @@ function decodeContent(text) {
     }
 
     try {
-        const decodedText = decodeUriComponentIfNeeded(decodeBase64(base64Candidate));
+        const decodedBase64Text = decodeBase64(base64Candidate).trim();
+        if (isPlainSubscriptionContent(decodedBase64Text)) {
+            return decodedBase64Text;
+        }
+
+        const decodedText = decodeWholePayloadIfNeeded(decodedBase64Text);
         if (isPlainSubscriptionContent(decodedText)) {
             return decodedText;
         }

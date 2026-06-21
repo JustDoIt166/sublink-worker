@@ -270,15 +270,17 @@ export function parseServerInfo(serverInfo) {
 }
 
 export function parseUrlParams(url) {
-	const [, rest] = url.split('://');
-	const [addressPart, ...remainingParts] = rest.split('?');
-	const paramsPart = remainingParts.join('?');
-
-	const [paramsOnly, ...fragmentParts] = paramsPart.split('#');
+	const schemeSeparatorIndex = url.indexOf('://');
+	const rest = schemeSeparatorIndex >= 0 ? url.slice(schemeSeparatorIndex + 3) : url;
+	const fragmentIndex = rest.indexOf('#');
+	const beforeFragment = fragmentIndex >= 0 ? rest.slice(0, fragmentIndex) : rest;
+	const queryIndex = beforeFragment.indexOf('?');
+	const addressPart = queryIndex >= 0 ? beforeFragment.slice(0, queryIndex) : beforeFragment;
+	const paramsOnly = queryIndex >= 0 ? beforeFragment.slice(queryIndex + 1) : '';
 	const searchParams = new URLSearchParams(paramsOnly);
 	const params = Object.fromEntries(searchParams.entries());
 
-	let name = fragmentParts.length > 0 ? fragmentParts.join('#') : '';
+	let name = fragmentIndex >= 0 ? rest.slice(fragmentIndex + 1) : '';
 	try {
 		name = decodeURIComponent(name);
 	} catch (error) { };
