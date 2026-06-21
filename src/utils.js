@@ -1,13 +1,15 @@
 const PATH_LENGTH = 7;
+const FNV_32_OFFSET_BASIS = 0x811c9dc5;
+const FNV_32_PRIME = 0x01000193;
 
 // 自定义的字符串前缀检查函数
 export function checkStartsWith(str, prefix) {
-  if (str === undefined || str === null || prefix === undefined || prefix === null) {
-    return false;
-  }
-  str = String(str);
-  prefix = String(prefix);
-  return str.slice(0, prefix.length) === prefix;
+	if (str === undefined || str === null || prefix === undefined || prefix === null) {
+		return false;
+	}
+	str = String(str);
+	prefix = String(prefix);
+	return str.slice(0, prefix.length) === prefix;
 }
 
 
@@ -152,23 +154,96 @@ export function tryDecodeSubscriptionLines(input, { decodeUriComponent = false }
 
 	return trimmed;
 }
-export function DeepCopy(obj) {
+
+export function groupProxiesByCountry(proxies, { getName } = {}) {
+	const extractor = typeof getName === 'function'
+		? getName
+		: (proxy) => {
+			if (proxy == null) return undefined;
+			if (typeof proxy === 'string') {
+				return proxy;
+			}
+			if (typeof proxy === 'object') {
+				return proxy.name ?? proxy.tag ?? proxy.id ?? proxy.ps;
+			}
+			return undefined;
+		};
+
+	const normalizeName = (value) => {
+		if (typeof value !== 'string') {
+			return undefined;
+		}
+		const trimmed = value.trim();
+		if (!trimmed) {
+			return undefined;
+		}
+		const eqIndex = trimmed.indexOf('=');
+		if (eqIndex > -1) {
+			const beforeEq = trimmed.slice(0, eqIndex).trim();
+			if (beforeEq) {
+				return beforeEq;
+			}
+		}
+		return trimmed;
+	};
+
+	const grouped = {};
+	if (!Array.isArray(proxies) || proxies.length === 0) {
+		return grouped;
+	}
+
+	proxies.forEach(proxy => {
+		const rawName = extractor(proxy);
+		const proxyName = normalizeName(rawName);
+		if (!proxyName) {
+			return;
+		}
+		const countryInfo = parseCountryFromNodeName(proxyName);
+		if (!countryInfo) {
+			return;
+		}
+		const { name } = countryInfo;
+		if (!grouped[name]) {
+			grouped[name] = { ...countryInfo, proxies: [] };
+		}
+		grouped[name].proxies.push(proxyName);
+	});
+
+	return grouped;
+}
+
+export function createStableProviderName(url) {
+	if (typeof url !== 'string' || url.trim() === '') {
+		throw new Error('Provider URL must be a non-empty string');
+	}
+
+	const normalizedUrl = url.trim();
+	let hash = FNV_32_OFFSET_BASIS;
+	for (let i = 0; i < normalizedUrl.length; i++) {
+		hash ^= normalizedUrl.charCodeAt(i);
+		hash = Math.imul(hash, FNV_32_PRIME);
+	}
+
+	return `_auto_provider_${(hash >>> 0).toString(36)}`;
+}
+
+export function deepCopy(obj) {
 	if (obj === null || typeof obj !== 'object') {
 		return obj;
 	}
 	if (Array.isArray(obj)) {
-		return obj.map(item => DeepCopy(item));
+		return obj.map(item => deepCopy(item));
 	}
 	const newObj = {};
 	for (const key in obj) {
 		if (Object.prototype.hasOwnProperty.call(obj, key)) {
-			newObj[key] = DeepCopy(obj[key]);
+			newObj[key] = deepCopy(obj[key]);
 		}
 	}
 	return newObj;
 }
 
-export function GenerateWebPath(length = PATH_LENGTH) {
+export function generateWebPath(length = PATH_LENGTH) {
 	const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
 	let result = ''
 	for (let i = 0; i < length; i++) {
@@ -178,64 +253,67 @@ export function GenerateWebPath(length = PATH_LENGTH) {
 }
 
 export function parseServerInfo(serverInfo) {
+	if (!serverInfo || typeof serverInfo !== 'string') {
+		return { host: null, port: null };
+	}
 	let host, port;
 	if (serverInfo.startsWith('[')) {
-	  const closeBracketIndex = serverInfo.indexOf(']');
-	  host = serverInfo.slice(1, closeBracketIndex);
-	  port = serverInfo.slice(closeBracketIndex + 2); // +2 to skip ']:'
+		const closeBracketIndex = serverInfo.indexOf(']');
+		host = serverInfo.slice(1, closeBracketIndex);
+		port = serverInfo.slice(closeBracketIndex + 2); // +2 to skip ']:'
 	} else {
-	  const lastColonIndex = serverInfo.lastIndexOf(':');
-	  host = serverInfo.slice(0, lastColonIndex);
-	  port = serverInfo.slice(lastColonIndex + 1);
+		const lastColonIndex = serverInfo.lastIndexOf(':');
+		host = serverInfo.slice(0, lastColonIndex);
+		port = serverInfo.slice(lastColonIndex + 1);
 	}
 	return { host, port: parseInt(port) };
-  }
-  
-  export function parseUrlParams(url) {
+}
+
+export function parseUrlParams(url) {
 	const [, rest] = url.split('://');
 	const [addressPart, ...remainingParts] = rest.split('?');
 	const paramsPart = remainingParts.join('?');
-  
+
 	const [paramsOnly, ...fragmentParts] = paramsPart.split('#');
 	const searchParams = new URLSearchParams(paramsOnly);
 	const params = Object.fromEntries(searchParams.entries());
 
 	let name = fragmentParts.length > 0 ? fragmentParts.join('#') : '';
 	try {
-	    name = decodeURIComponent(name);
+		name = decodeURIComponent(name);
 	} catch (error) { };
-	
+
 	return { addressPart, params, name };
-  }
-  
-  export function createTlsConfig(params) {
+}
+
+export function createTlsConfig(params) {
 	let tls = { enabled: false };
-	if (params.security != 'none') {
-	  tls = {
-		enabled: true,
-		server_name: params.sni || params.host,
-		insecure: !!params?.allowInsecure || !!params?.insecure || !!params?.allow_insecure,
-		// utls: {
-		//   enabled: true,
-		//   fingerprint: "chrome"
-		// },
-	  };
-	  if (params.security === 'reality') {
-		tls.reality = {
-		  enabled: true,
-		  public_key: params.pbk,
-		  short_id: params.sid,
+	if (params.security && params.security !== 'none') {
+		tls = {
+			enabled: true,
+			server_name: params.sni || params.host,
+			insecure: !!params?.allowInsecure || !!params?.insecure || !!params?.allow_insecure,
+			// utls: {
+			//   enabled: true,
+			//   fingerprint: "chrome"
+			// },
 		};
-	  }
+		if (params.security === 'reality') {
+			tls.reality = {
+				enabled: true,
+				public_key: params.pbk,
+				short_id: params.sid,
+			};
+		}
 	}
 	return tls;
-  }
+}
 
 export function createTransportConfig(params) {
 	return {
 		type: params.type,
 		path: params.path ?? undefined,
-		...(params.host && {'headers': {'host': params.host}}),
+		...(params.host && { 'headers': { 'host': params.host } }),
 		...(params.type === 'grpc' && {
 			service_name: params.serviceName ?? undefined,
 		})
@@ -269,49 +347,64 @@ export function parseArray(value) {
 		.filter(entry => entry.length > 0);
 }
 
-export function parseCountryFromNodeName(nodeName) {
-        const countryData = {
-            'HK': { name: 'Hong Kong', emoji: '🇭🇰', aliases: ['香港', 'Hong Kong', 'HK'] },
-            'TW': { name: 'Taiwan', emoji: '🇹🇼', aliases: ['台湾', 'Taiwan', 'TW'] },
-            'JP': { name: 'Japan', emoji: '🇯🇵', aliases: ['日本', 'Japan', 'JP'] },
-            'KR': { name: 'Korea', emoji: '🇰🇷', aliases: ['韩国', 'Korea', 'KR'] },
-            'SG': { name: 'Singapore', emoji: '🇸🇬', aliases: ['新加坡', 'Singapore', 'SG'] },
-            'US': { name: 'United States', emoji: '🇺🇸', aliases: ['美国', 'United States', 'US'] },
-            'GB': { name: 'United Kingdom', emoji: '🇬🇧', aliases: ['英国', 'United Kingdom', 'UK', 'GB'] },
-            'DE': { name: 'Germany', emoji: '🇩🇪', aliases: ['德国', 'Germany'] },
-            'FR': { name: 'France', emoji: '🇫🇷', aliases: ['法国', 'France'] },
-            'RU': { name: 'Russia', emoji: '🇷🇺', aliases: ['俄罗斯', 'Russia'] },
-            'CA': { name: 'Canada', emoji: '🇨🇦', aliases: ['加拿大', 'Canada'] },
-            'AU': { name: 'Australia', emoji: '🇦🇺', aliases: ['澳大利亚', 'Australia'] },
-		'IN': { name: 'India', emoji: '🇮🇳', aliases: ['印度', 'India'] },
-		'BR': { name: 'Brazil', emoji: '🇧🇷', aliases: ['巴西', 'Brazil'] },
-		'ZA': { name: 'South Africa', emoji: '🇿🇦', aliases: ['南非', 'South Africa'] },
-		'AR': { name: 'Argentina', emoji: '🇦🇷', aliases: ['阿根廷', 'Argentina'] },
-		'TR': { name: 'Turkey', emoji: '🇹🇷', aliases: ['土耳其', 'Turkey'] },
-		'NL': { name: 'Netherlands', emoji: '🇳🇱', aliases: ['荷兰', 'Netherlands'] },
-		'CH': { name: 'Switzerland', emoji: '🇨🇭', aliases: ['瑞士', 'Switzerland'] },
-		'SE': { name: 'Sweden', emoji: '🇸🇪', aliases: ['瑞典', 'Sweden'] },
-		'IT': { name: 'Italy', emoji: '🇮🇹', aliases: ['意大利', 'Italy'] },
-		'ES': { name: 'Spain', emoji: '🇪🇸', aliases: ['西班牙', 'Spain'] },
-		'IE': { name: 'Ireland', emoji: '🇮🇪', aliases: ['爱尔兰', 'Ireland'] },
-		'MY': { name: 'Malaysia', emoji: '🇲🇾', aliases: ['马来西亚', 'Malaysia'] },
-		'TH': { name: 'Thailand', emoji: '🇹🇭', aliases: ['泰国', 'Thailand'] },
-		'VN': { name: 'Vietnam', emoji: '🇻🇳', aliases: ['越南', 'Vietnam'] },
-		'PH': { name: 'Philippines', emoji: '🇵🇭', aliases: ['菲律宾', 'Philippines'] },
-		'ID': { name: 'Indonesia', emoji: '🇮🇩', aliases: ['印度尼西亚', 'Indonesia'] },
-		'NZ': { name: 'New Zealand', emoji: '🇳🇿', aliases: ['新西兰', 'New Zealand'] },
-		'AE': { name: 'United Arab Emirates', emoji: '🇦🇪', aliases: ['阿联酋', 'United Arab Emirates'] },
-	};
+export const COUNTRY_DATA = {
+	'HK': { name: 'Hong Kong', emoji: '🇭🇰', aliases: ['香港', 'Hong Kong', 'HK'] },
+	'TW': { name: 'Taiwan', emoji: '🇹🇼', aliases: ['台湾', 'Taiwan', 'TW'] },
+	'JP': { name: 'Japan', emoji: '🇯🇵', aliases: ['日本', 'Japan', 'JP'] },
+	'KR': { name: 'Korea', emoji: '🇰🇷', aliases: ['韩国', 'Korea', 'KR'] },
+	'SG': { name: 'Singapore', emoji: '🇸🇬', aliases: ['新加坡', 'Singapore', 'SG'] },
+	'US': { name: 'United States', emoji: '🇺🇸', aliases: ['美国', 'United States', 'US'] },
+	'GB': { name: 'United Kingdom', emoji: '🇬🇧', aliases: ['英国', 'United Kingdom', 'UK', 'GB'] },
+	'DE': { name: 'Germany', emoji: '🇩🇪', aliases: ['德国', 'Germany'] },
+	'FR': { name: 'France', emoji: '🇫🇷', aliases: ['法国', 'France'] },
+	'RU': { name: 'Russia', emoji: '🇷🇺', aliases: ['俄罗斯', 'Russia'] },
+	'CA': { name: 'Canada', emoji: '🇨🇦', aliases: ['加拿大', 'Canada'] },
+	'AU': { name: 'Australia', emoji: '🇦🇺', aliases: ['澳大利亚', 'Australia'] },
+	'IN': { name: 'India', emoji: '🇮🇳', aliases: ['印度', 'India'] },
+	'BR': { name: 'Brazil', emoji: '🇧🇷', aliases: ['巴西', 'Brazil'] },
+	'ZA': { name: 'South Africa', emoji: '🇿🇦', aliases: ['南非', 'South Africa'] },
+	'AR': { name: 'Argentina', emoji: '🇦🇷', aliases: ['阿根廷', 'Argentina'] },
+	'TR': { name: 'Turkey', emoji: '🇹🇷', aliases: ['土耳其', 'Turkey'] },
+	'NL': { name: 'Netherlands', emoji: '🇳🇱', aliases: ['荷兰', 'Netherlands'] },
+	'CH': { name: 'Switzerland', emoji: '🇨🇭', aliases: ['瑞士', 'Switzerland'] },
+	'SE': { name: 'Sweden', emoji: '🇸🇪', aliases: ['瑞典', 'Sweden'] },
+	'IT': { name: 'Italy', emoji: '🇮🇹', aliases: ['意大利', 'Italy'] },
+	'ES': { name: 'Spain', emoji: '🇪🇸', aliases: ['西班牙', 'Spain'] },
+	'IE': { name: 'Ireland', emoji: '🇮🇪', aliases: ['爱尔兰', 'Ireland'] },
+	'MY': { name: 'Malaysia', emoji: '🇲🇾', aliases: ['马来西亚', 'Malaysia'] },
+	'TH': { name: 'Thailand', emoji: '🇹🇭', aliases: ['泰国', 'Thailand'] },
+	'VN': { name: 'Vietnam', emoji: '🇻🇳', aliases: ['越南', 'Vietnam'] },
+	'PH': { name: 'Philippines', emoji: '🇵🇭', aliases: ['菲律宾', 'Philippines'] },
+	'ID': { name: 'Indonesia', emoji: '🇮🇩', aliases: ['印度尼西亚', 'Indonesia'] },
+	'NZ': { name: 'New Zealand', emoji: '🇳🇿', aliases: ['新西兰', 'New Zealand'] },
+	'AE': { name: 'United Arab Emirates', emoji: '🇦🇪', aliases: ['阿联酋', 'United Arab Emirates'] },
+};
 
-	const allAliases = Object.values(countryData).flatMap(c => c.aliases);
-	const regex = new RegExp(allAliases.map(p => p.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')).join('|'), 'i');
+export function parseCountryFromNodeName(nodeName) {
+	// Build patterns sorted by length descending so longer aliases match first
+	// (e.g. "Indonesia" before "India", "United States" before "US").
+	// Short aliases (<=3 chars, all ASCII, e.g. US, UK, HK) get \b word boundaries
+	// to prevent false positives like "plus" matching "US".
+	const allEntries = Object.values(COUNTRY_DATA).flatMap(c =>
+		c.aliases.map(alias => ({ alias, escaped: alias.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&') }))
+	);
+	allEntries.sort((a, b) => b.alias.length - a.alias.length);
+
+	const patterns = allEntries.map(({ alias, escaped }) => {
+		if (alias.length <= 3 && /^[A-Za-z]+$/.test(alias)) {
+			return `\\b${escaped}\\b`;
+		}
+		return escaped;
+	});
+
+	const regex = new RegExp(patterns.join('|'), 'i');
 	const match = nodeName.match(regex);
 
 	if (match) {
 		const matchedAlias = match[0];
-		for (const code in countryData) {
-			if (countryData[code].aliases.some(alias => alias.toLowerCase() === matchedAlias.toLowerCase())) {
-				return { code, ...countryData[code] };
+		for (const code in COUNTRY_DATA) {
+			if (COUNTRY_DATA[code].aliases.some(alias => alias.toLowerCase() === matchedAlias.toLowerCase())) {
+				return { code, ...COUNTRY_DATA[code] };
 			}
 		}
 	}
