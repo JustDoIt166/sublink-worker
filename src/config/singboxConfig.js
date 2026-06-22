@@ -49,7 +49,8 @@ export const SING_BOX_CONFIG = JSON.parse(JSON.stringify({
 				query_type: [
 					"A",
 					"AAAA",
-					"CNAME"
+					"CNAME",
+					"HTTPS"
 				],
 				invert: true,
 				action: "predefined",
