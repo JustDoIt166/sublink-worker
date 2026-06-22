@@ -312,14 +312,32 @@ export function createTlsConfig(params) {
 }
 
 export function createTransportConfig(params) {
-	return {
-		type: params.type,
+	const type = params.type === 'xhttp' ? 'http' : params.type;
+
+	const config = {
+		type,
 		path: params.path ?? undefined,
-		...(params.host && { 'headers': { 'host': params.host } }),
-		...(params.type === 'grpc' && {
-			service_name: params.serviceName ?? undefined,
-		})
 	};
+
+	if (params.host) {
+		if (type === 'http') {
+			config.host = [params.host];
+		} else if (type === 'httpupgrade') {
+			config.host = params.host;
+		} else {
+			config.headers = { host: params.host };
+		}
+	}
+
+	if (type === 'grpc') {
+		config.service_name = params.serviceName ?? undefined;
+	}
+
+	if (type === 'http') {
+		config.method = params.method || 'PUT';
+	}
+
+	return config;
 }
 
 // Parse boolean value from various formats

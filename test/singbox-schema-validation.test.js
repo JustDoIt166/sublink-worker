@@ -252,15 +252,14 @@ describe('Sing-Box schema validation with real subscription data', () => {
 
             for (const proxy of getProxies(result)) {
                 if (proxy.transport) {
-                    expect(['ws', 'xhttp', 'grpc', 'http', 'h2', 'tcp']).toContain(proxy.transport.type);
+                    expect(['ws', 'http', 'grpc', 'httpupgrade']).toContain(proxy.transport.type);
                     if (proxy.transport.type === 'ws') {
                         expect(proxy.transport).toHaveProperty('path');
                     }
-                    if (proxy.transport.type === 'xhttp') {
+                    if (proxy.transport.type === 'http') {
                         expect(proxy.transport).toHaveProperty('path');
-                        if (proxy.transport.mode) {
-                            expect(proxy.transport.mode).toMatch(/^(auto|multi|packet)$/);
-                        }
+                        expect(proxy.transport).toHaveProperty('host');
+                        expect(proxy.transport).toHaveProperty('method', 'PUT');
                     }
                 }
             }
