@@ -295,11 +295,16 @@ export function createTlsConfig(params) {
 			enabled: true,
 			server_name: params.sni || params.host,
 			insecure: !!params?.allowInsecure || !!params?.insecure || !!params?.allow_insecure,
-			// utls: {
-			//   enabled: true,
-			//   fingerprint: "chrome"
-			// },
 		};
+		if (params.alpn) {
+			tls.alpn = parseArray(params.alpn);
+		}
+		if (params.fp) {
+			tls.utls = {
+				enabled: true,
+				fingerprint: params.fp,
+			};
+		}
 		if (params.security === 'reality') {
 			tls.reality = {
 				enabled: true,

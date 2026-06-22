@@ -214,9 +214,23 @@ describe('Sing-Box schema validation with real subscription data', () => {
             const result = await builder.build();
 
             for (const proxy of getProxies(result)) {
-                if (proxy.alpn) {
-                    expect(proxy.tls).toBeDefined();
-                    expect(proxy.tls.alpn).toEqual(proxy.alpn);
+                if (proxy.tls?.enabled) {
+                    expect(proxy.tls).toHaveProperty('alpn');
+                    expect(Array.isArray(proxy.tls.alpn)).toBe(true);
+                    expect(proxy.tls.alpn.length).toBeGreaterThan(0);
+                }
+            }
+        });
+
+        it('should have utls fingerprint when fp is provided', async () => {
+            const builder = new SingboxConfigBuilder(REAL_SUBSCRIPTION, [], [], null, 'zh-CN', null, false);
+            const result = await builder.build();
+
+            for (const proxy of getProxies(result)) {
+                if (proxy.tls?.enabled) {
+                    expect(proxy.tls).toHaveProperty('utls');
+                    expect(proxy.tls.utls).toHaveProperty('enabled', true);
+                    expect(proxy.tls.utls).toHaveProperty('fingerprint');
                 }
             }
         });
