@@ -113,6 +113,30 @@ export class SingboxConfigBuilder extends BaseConfigBuilder {
         // xudp is default in newer versions
         delete sanitized.packet_encoding;
 
+        // Extract early data from WS transport path (?ed=NUMBER → max_early_data + early_data_header_name)
+        if (sanitized.transport?.type === 'ws' && sanitized.transport?.path) {
+            const qIndex = sanitized.transport.path.indexOf('?');
+            if (qIndex >= 0) {
+                const sp = new URLSearchParams(sanitized.transport.path.slice(qIndex + 1));
+                const ed = sp.get('ed');
+                if (ed) {
+                    const n = parseInt(ed, 10);
+                    if (!isNaN(n) && n > 0) {
+                        sp.delete('ed');
+                        const rest = sp.toString();
+                        sanitized.transport = {
+                            ...sanitized.transport,
+                            path: rest
+                                ? `${sanitized.transport.path.slice(0, qIndex)}?${rest}`
+                                : sanitized.transport.path.slice(0, qIndex),
+                            max_early_data: n,
+                            early_data_header_name: 'Sec-WebSocket-Protocol',
+                        };
+                    }
+                }
+            }
+        }
+
         return sanitized;
     }
 
