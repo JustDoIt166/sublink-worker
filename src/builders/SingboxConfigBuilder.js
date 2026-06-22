@@ -1,5 +1,5 @@
 
-import { SING_BOX_CONFIG, generateRuleSets, generateRules, getOutbounds, PREDEFINED_RULE_SETS, DIRECT_DEFAULT_RULES, REJECT_ACTION_RULES } from '../config/index.js';
+import { SING_BOX_CONFIG, SING_BOX_CONFIG_V1_11, SING_BOX_CONFIG_V1_13, generateRuleSets, generateRules, getOutbounds, PREDEFINED_RULE_SETS, DIRECT_DEFAULT_RULES, REJECT_ACTION_RULES } from '../config/index.js';
 import { BaseConfigBuilder } from './BaseConfigBuilder.js';
 import { deepCopy, groupProxiesByCountry } from '../utils.js';
 import { addProxyWithDedup } from './helpers/proxyHelpers.js';
@@ -8,7 +8,10 @@ import { normalizeGroupName } from './helpers/groupNameUtils.js';
 
 export class SingboxConfigBuilder extends BaseConfigBuilder {
     constructor(inputString, selectedRules, customRules, baseConfig, lang, userAgent, groupByCountry = false, enableClashUI = false, externalController, externalUiDownloadUrl, singboxVersion = '1.12', includeAutoSelect = true) {
-        const resolvedBaseConfig = baseConfig ?? SING_BOX_CONFIG;
+        const resolvedBaseConfig = baseConfig ?? 
+            (singboxVersion === '1.11' ? SING_BOX_CONFIG_V1_11 :
+             singboxVersion === '1.13' ? SING_BOX_CONFIG_V1_13 :
+             SING_BOX_CONFIG);
         super(inputString, resolvedBaseConfig, lang, userAgent, groupByCountry, includeAutoSelect);
 
         this.selectedRules = selectedRules;
@@ -18,7 +21,7 @@ export class SingboxConfigBuilder extends BaseConfigBuilder {
         this.enableClashUI = enableClashUI;
         this.externalController = externalController;
         this.externalUiDownloadUrl = externalUiDownloadUrl;
-        this.singboxVersion = singboxVersion;  // '1.11' or '1.12'
+        this.singboxVersion = singboxVersion;  // '1.11', '1.12', or '1.13'
 
         if (this.config?.dns?.servers?.length > 0) {
             this.config.dns.servers[0].detour = this.t('outboundNames.Node Select');

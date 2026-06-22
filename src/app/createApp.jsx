@@ -16,7 +16,7 @@ import { ShortLinkService } from '../services/shortLinkService.js';
 import { ConfigStorageService } from '../services/configStorageService.js';
 import { ServiceError, MissingDependencyError } from '../services/errors.js';
 import { normalizeRuntime } from '../runtime/runtimeConfig.js';
-import { PREDEFINED_RULE_SETS, SING_BOX_CONFIG, SING_BOX_CONFIG_V1_11, generateSubconverterConfig } from '../config/index.js';
+import { PREDEFINED_RULE_SETS, SING_BOX_CONFIG, SING_BOX_CONFIG_V1_11, SING_BOX_CONFIG_V1_13, generateSubconverterConfig } from '../config/index.js';
 
 const DEFAULT_USER_AGENT = 'curl/7.74.0';
 
@@ -90,7 +90,14 @@ export function createApp(bindings = {}) {
             const requestUserAgent = getRequestHeader(c.req, 'User-Agent');
             const singboxConfigVersion = resolveSingboxConfigVersion(requestedSingboxVersion, requestUserAgent);
 
-            let baseConfig = singboxConfigVersion === '1.11' ? SING_BOX_CONFIG_V1_11 : SING_BOX_CONFIG;
+            let baseConfig;
+            if (singboxConfigVersion === '1.11') {
+                baseConfig = SING_BOX_CONFIG_V1_11;
+            } else if (singboxConfigVersion === '1.12') {
+                baseConfig = SING_BOX_CONFIG;
+            } else {
+                baseConfig = SING_BOX_CONFIG_V1_13;
+            }
             if (configId) {
                 const storage = requireConfigStorage(services.configStorage);
                 const storedConfig = await storage.getConfigById(configId);
@@ -478,10 +485,12 @@ function resolveSingboxConfigVersion(requestedVersion, userAgent) {
     const normalizedRequested = typeof requestedVersion === 'string' ? requestedVersion.trim().toLowerCase() : '';
     if (normalizedRequested && normalizedRequested !== 'auto') {
         if (normalizedRequested === 'legacy') return '1.11';
-        if (normalizedRequested === 'latest') return '1.12';
+        if (normalizedRequested === 'latest') return '1.13';
         const parsed = parseSemverLike(normalizedRequested);
         if (parsed) {
-            return isSingboxLegacyConfig(parsed) ? '1.11' : '1.12';
+            if (isSingboxLegacyConfig(parsed)) return '1.11';
+            if (parsed.major === 1 && parsed.minor >= 13) return '1.13';
+            return '1.12';
         }
     }
 
@@ -490,7 +499,9 @@ function resolveSingboxConfigVersion(requestedVersion, userAgent) {
         const versionString = uaMatch?.[1];
         const parsed = versionString ? parseSemverLike(versionString) : null;
         if (parsed) {
-            return isSingboxLegacyConfig(parsed) ? '1.11' : '1.12';
+            if (isSingboxLegacyConfig(parsed)) return '1.11';
+            if (parsed.major === 1 && parsed.minor >= 13) return '1.13';
+            return '1.12';
         }
     }
 
