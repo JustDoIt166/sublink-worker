@@ -170,7 +170,7 @@ describe('Auto Proxy Providers Detection', () => {
             expect(proxyOutbounds.length).toBeGreaterThan(0);
         });
 
-        it('should NOT use outbound_providers for Sing-Box 1.11 (not supported)', async () => {
+        it('should support outbound_providers for any version (legacy version param ignored)', async () => {
             // Mock fetchSubscriptionWithFormat to return Sing-Box format
             fetchSubscriptionWithFormat.mockResolvedValue({
                 content: mockSingboxJson,
@@ -178,7 +178,6 @@ describe('Auto Proxy Providers Detection', () => {
                 url: 'https://example.com/singbox-sub'
             });
 
-            // Use version 1.11 - providers NOT supported
             const builder = new SingboxConfigBuilder(
                 'https://example.com/singbox-sub',
                 [],
@@ -189,18 +188,14 @@ describe('Auto Proxy Providers Detection', () => {
                 false,  // groupByCountry
                 false,  // enableClashUI
                 null,   // externalController
-                null,   // externalUiDownloadUrl
-                '1.11'  // singboxVersion - 1.11 does NOT support providers
+                null    // externalUiDownloadUrl
             );
             await builder.build();
             const config = builder.config;
 
-            // Should NOT have outbound_providers (1.11 doesn't support it)
-            expect(config.outbound_providers).toBeUndefined();
-
-            // Should have parsed outbounds instead
-            const proxyOutbounds = config.outbounds.filter(o => o.server);
-            expect(proxyOutbounds.length).toBeGreaterThan(0);
+            // Should have outbound_providers
+            expect(config.outbound_providers).toBeDefined();
+            expect(config.outbound_providers).toHaveLength(1);
         });
     });
 

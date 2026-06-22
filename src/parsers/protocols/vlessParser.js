@@ -5,14 +5,14 @@ export function parseVless(url) {
     const [uuid, serverInfo] = addressPart.split('@');
     const { host, port } = parseServerInfo(serverInfo);
 
-    const tls = createTlsConfig(params);
+    const transport = params.type !== 'tcp' ? createTransportConfig(params) : undefined;
+    const tls = createTlsConfig(params, transport?.type);
     if (tls.reality) {
         tls.utls = {
             enabled: true,
             fingerprint: 'chrome'
         };
     }
-    const transport = params.type !== 'tcp' ? createTransportConfig(params) : undefined;
 
     // `udp` is a Clash-only flag; ClashConfigBuilder reads it, SingboxConfigBuilder strips it.
     const udp = params.udp !== undefined ? parseBool(params.udp) : undefined;

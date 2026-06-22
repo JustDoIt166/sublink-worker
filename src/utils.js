@@ -288,7 +288,7 @@ export function parseUrlParams(url) {
 	return { addressPart, params, name };
 }
 
-export function createTlsConfig(params) {
+export function createTlsConfig(params, transportType) {
 	let tls = { enabled: false };
 	if (params.security && params.security !== 'none') {
 		tls = {
@@ -297,7 +297,12 @@ export function createTlsConfig(params) {
 			insecure: !!params?.allowInsecure || !!params?.insecure || !!params?.allow_insecure,
 		};
 		if (params.alpn) {
-			tls.alpn = parseArray(params.alpn);
+			let alpn = parseArray(params.alpn);
+			if (transportType === 'ws') {
+				alpn = alpn.filter(p => p === 'http/1.1');
+				if (alpn.length === 0) alpn = ['http/1.1'];
+			}
+			tls.alpn = alpn;
 		}
 		if (params.fp) {
 			tls.utls = {
@@ -311,6 +316,14 @@ export function createTlsConfig(params) {
 				public_key: params.pbk,
 				short_id: params.sid,
 			};
+		}
+		if (params.ech) {
+			const echHost = params.ech.split('+')[0];
+			const ech = { enabled: true };
+			if (echHost && echHost !== (params.sni || params.host)) {
+				ech.query_server_name = echHost;
+			}
+			tls.ech = ech;
 		}
 	}
 	return tls;
@@ -330,7 +343,7 @@ export function createTransportConfig(params) {
 		} else if (type === 'httpupgrade') {
 			config.host = params.host;
 		} else {
-			config.headers = { host: params.host };
+			config.headers = { Host: params.host };
 		}
 	}
 

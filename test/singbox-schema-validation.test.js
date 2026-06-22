@@ -439,44 +439,48 @@ describe('Sing-Box schema validation with real subscription data', () => {
         });
     });
 
-    describe('Version detection', () => {
-        it('sb_version=1.12 should produce same format as default', async () => {
+    describe('Version query param is ignored (always v1.13)', () => {
+        it('should still work with sb_version=1.13', async () => {
             const app = createApp({ kv: new MemoryKVAdapter(), logger: console, config: { configTtlSeconds: 60, shortLinkTtlSeconds: null } });
-            const [resDefault, res12] = await Promise.all([
-                app.request(`http://localhost/singbox?config=${encodeURIComponent(REAL_SUBSCRIPTION)}`),
-                app.request(`http://localhost/singbox?config=${encodeURIComponent(REAL_SUBSCRIPTION)}&sb_version=1.12`)
-            ]);
+            const res = await app.request(`http://localhost/singbox?config=${encodeURIComponent(REAL_SUBSCRIPTION)}&sb_version=1.13`);
 
-            const jsonDefault = await resDefault.json();
-            const json12 = await res12.json();
+            expect(res.status).toBe(200);
+            const json = await res.json();
 
-            expect(json12.dns.servers[0]).toHaveProperty('type');
-            expect(json12.route).toHaveProperty('default_domain_resolver', 'dns_resolver');
+            expect(json.dns.servers[0]).toHaveProperty('type');
+            expect(json.dns.servers[0]).not.toHaveProperty('address');
+            expect(json.route).toHaveProperty('default_domain_resolver', 'dns_resolver');
         });
 
-        it('sb_version=legacy should produce 1.11 format', async () => {
+        it('sb_version=legacy should also produce v1.13 format now', async () => {
             const app = createApp({ kv: new MemoryKVAdapter(), logger: console, config: { configTtlSeconds: 60, shortLinkTtlSeconds: null } });
             const res = await app.request(`http://localhost/singbox?config=${encodeURIComponent(REAL_SUBSCRIPTION)}&sb_version=legacy`);
 
             expect(res.status).toBe(200);
             const json = await res.json();
 
-            expect(json.dns.servers[0]).not.toHaveProperty('type');
-            expect(json.dns.servers[0]).toHaveProperty('address');
-            expect(json.route).not.toHaveProperty('default_domain_resolver');
-        });
-
-        it('UA with sing-box 1.14 should resolve to 1.13 config (same format)', async () => {
-            const app = createApp({ kv: new MemoryKVAdapter(), logger: console, config: { configTtlSeconds: 60, shortLinkTtlSeconds: null } });
-            const res = await app.request(`http://localhost/singbox?config=${encodeURIComponent(REAL_SUBSCRIPTION)}`, {
-                headers: { 'User-Agent': 'sing-box 1.14.0' }
-            });
-
-            expect(res.status).toBe(200);
-            const json = await res.json();
-
             expect(json.dns.servers[0]).toHaveProperty('type');
             expect(json.route).toHaveProperty('default_domain_resolver');
+        });
+
+        it('UA sing-box version should not affect config format', async () => {
+            const app = createApp({ kv: new MemoryKVAdapter(), logger: console, config: { configTtlSeconds: 60, shortLinkTtlSeconds: null } });
+            const [resLegacyUA, resModernUA] = await Promise.all([
+                app.request(`http://localhost/singbox?config=${encodeURIComponent(REAL_SUBSCRIPTION)}`, {
+                    headers: { 'User-Agent': 'sing-box 1.11.4' }
+                }),
+                app.request(`http://localhost/singbox?config=${encodeURIComponent(REAL_SUBSCRIPTION)}`, {
+                    headers: { 'User-Agent': 'sing-box 1.14.0' }
+                })
+            ]);
+
+            const jsonLegacy = await resLegacyUA.json();
+            const jsonModern = await resModernUA.json();
+
+            expect(jsonLegacy.dns.servers[0]).toHaveProperty('type');
+            expect(jsonLegacy.route).toHaveProperty('default_domain_resolver');
+            expect(jsonModern.dns.servers[0]).toHaveProperty('type');
+            expect(jsonModern.route).toHaveProperty('default_domain_resolver');
         });
     });
 

@@ -1,14 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { SingboxConfigBuilder } from '../src/builders/SingboxConfigBuilder.js';
-import { SING_BOX_CONFIG, SING_BOX_CONFIG_V1_11, SING_BOX_CONFIG_V1_13 } from '../src/config/singboxConfig.js';
-
-/**
- * Tests for sing-box 1.13+ compatibility (issue #357)
- *
- * Legacy inbound fields (sniff, sniff_timeout, domain_strategy, etc.) were
- * deprecated in sing-box 1.11.0 and removed in 1.13.0.
- * Sniffing is now handled via route rule actions: { "action": "sniff" }
- */
+import { SING_BOX_CONFIG } from '../src/config/singboxConfig.js';
 
 const sampleInput = JSON.stringify({
     outbounds: [
@@ -24,7 +16,6 @@ const sampleInput = JSON.stringify({
 });
 
 const LEGACY_INBOUND_FIELDS = ['sniff', 'sniff_timeout', 'sniff_override_destination', 'domain_strategy', 'udp_disable_domain_unmapping'];
-const LEGACY_SPECIAL_OUTBOUNDS = ['block', 'dns'];
 
 describe('sing-box 1.13+ compatibility: no legacy inbound fields', () => {
     it('SING_BOX_CONFIG inbounds should not contain legacy fields', () => {
@@ -35,46 +26,28 @@ describe('sing-box 1.13+ compatibility: no legacy inbound fields', () => {
         }
     });
 
-    it('SING_BOX_CONFIG_V1_11 inbounds should not contain legacy fields', () => {
-        for (const inbound of SING_BOX_CONFIG_V1_11.inbounds) {
-            for (const field of LEGACY_INBOUND_FIELDS) {
-                expect(inbound).not.toHaveProperty(field);
-            }
-        }
+    it('SING_BOX_CONFIG should use new DNS server format (type/server)', () => {
+        expect(SING_BOX_CONFIG.dns.servers[0]).toHaveProperty('type');
+        expect(SING_BOX_CONFIG.dns.servers[0]).toHaveProperty('server');
+        expect(SING_BOX_CONFIG.dns.servers[0]).not.toHaveProperty('address');
+        expect(SING_BOX_CONFIG.route).toHaveProperty('default_domain_resolver', 'dns_resolver');
     });
 
-    it('SING_BOX_CONFIG_V1_13 inbounds should not contain legacy fields', () => {
-        for (const inbound of SING_BOX_CONFIG_V1_13.inbounds) {
-            for (const field of LEGACY_INBOUND_FIELDS) {
-                expect(inbound).not.toHaveProperty(field);
-            }
-        }
+    it('SING_BOX_CONFIG should have complete template structure', () => {
+        expect(SING_BOX_CONFIG).toHaveProperty('dns');
+        expect(SING_BOX_CONFIG).toHaveProperty('ntp');
+        expect(SING_BOX_CONFIG).toHaveProperty('inbounds');
+        expect(SING_BOX_CONFIG).toHaveProperty('outbounds');
+        expect(SING_BOX_CONFIG).toHaveProperty('route');
+        expect(SING_BOX_CONFIG).toHaveProperty('experimental');
+        expect(SING_BOX_CONFIG.inbounds.length).toBe(6);
+        expect(SING_BOX_CONFIG.outbounds.length).toBe(1);
     });
 
-    it('base configs should not contain legacy special outbounds', () => {
-        for (const config of [SING_BOX_CONFIG, SING_BOX_CONFIG_V1_11, SING_BOX_CONFIG_V1_13]) {
-            const outboundTypes = config.outbounds.map(outbound => outbound.type);
-            expect(outboundTypes).not.toContain('block');
-            expect(outboundTypes).not.toContain('dns');
-        }
-    });
-
-    it('SING_BOX_CONFIG_V1_13 should use new DNS server format (type/server)', () => {
-        expect(SING_BOX_CONFIG_V1_13.dns.servers[0]).toHaveProperty('type');
-        expect(SING_BOX_CONFIG_V1_13.dns.servers[0]).toHaveProperty('server');
-        expect(SING_BOX_CONFIG_V1_13.dns.servers[0]).not.toHaveProperty('address');
-        expect(SING_BOX_CONFIG_V1_13.route).toHaveProperty('default_domain_resolver', 'dns_resolver');
-    });
-
-    it('SING_BOX_CONFIG_V1_13 should have complete template structure', () => {
-        expect(SING_BOX_CONFIG_V1_13).toHaveProperty('dns');
-        expect(SING_BOX_CONFIG_V1_13).toHaveProperty('ntp');
-        expect(SING_BOX_CONFIG_V1_13).toHaveProperty('inbounds');
-        expect(SING_BOX_CONFIG_V1_13).toHaveProperty('outbounds');
-        expect(SING_BOX_CONFIG_V1_13).toHaveProperty('route');
-        expect(SING_BOX_CONFIG_V1_13).toHaveProperty('experimental');
-        expect(SING_BOX_CONFIG_V1_13.inbounds.length).toBe(6);
-        expect(SING_BOX_CONFIG_V1_13.outbounds.length).toBe(1);
+    it('base config should not contain legacy special outbounds', () => {
+        const outboundTypes = SING_BOX_CONFIG.outbounds.map(outbound => outbound.type);
+        expect(outboundTypes).not.toContain('block');
+        expect(outboundTypes).not.toContain('dns');
     });
 
     it('should hijack DNS by dns-in inbound without relying on sniffed protocol', async () => {
@@ -89,31 +62,12 @@ describe('sing-box 1.13+ compatibility: no legacy inbound fields', () => {
         expect(result.route.rules).not.toContainEqual({ protocol: 'dns', action: 'hijack-dns' });
     });
 
-    it('built config (v1.12) should have sniff as route rule action, not on inbounds', async () => {
+    it('built config should have sniff as route rule action, not on inbounds', async () => {
         const builder = new SingboxConfigBuilder(
             sampleInput, [], [], null, 'zh-CN', null, false
         );
         const result = await builder.build();
 
-        // Inbounds must not have legacy fields
-        for (const inbound of result.inbounds) {
-            for (const field of LEGACY_INBOUND_FIELDS) {
-                expect(inbound, `inbound "${inbound.tag}" should not have "${field}"`).not.toHaveProperty(field);
-            }
-        }
-
-        // Route rules must contain { action: 'sniff' }
-        const sniffRule = result.route.rules.find(r => r.action === 'sniff');
-        expect(sniffRule).toBeDefined();
-    });
-
-    it('built config (v1.11) should have sniff as route rule action, not on inbounds', async () => {
-        const builder = new SingboxConfigBuilder(
-            sampleInput, [], [], SING_BOX_CONFIG_V1_11, 'zh-CN', null,
-            false, false, null, null, '1.11'
-        );
-        const result = await builder.build();
-
         for (const inbound of result.inbounds) {
             for (const field of LEGACY_INBOUND_FIELDS) {
                 expect(inbound, `inbound "${inbound.tag}" should not have "${field}"`).not.toHaveProperty(field);
@@ -122,13 +76,9 @@ describe('sing-box 1.13+ compatibility: no legacy inbound fields', () => {
 
         const sniffRule = result.route.rules.find(r => r.action === 'sniff');
         expect(sniffRule).toBeDefined();
-
-        const legacyOutbounds = result.outbounds.filter(outbound => LEGACY_SPECIAL_OUTBOUNDS.includes(outbound.type));
-        expect(legacyOutbounds).toEqual([]);
     });
 
     it('should not reintroduce legacy fields or special outbounds from custom base config', async () => {
-        // Simulate a user-provided base config that still has legacy sniff field
         const customBaseConfig = {
             inbounds: [
                 { type: 'mixed', tag: 'mixed-in', listen: '0.0.0.0', listen_port: 2080 },
@@ -146,11 +96,10 @@ describe('sing-box 1.13+ compatibility: no legacy inbound fields', () => {
         );
         const result = await builder.build();
 
-        // Route rules must still have sniff action
         const sniffRule = result.route.rules.find(r => r.action === 'sniff');
         expect(sniffRule).toBeDefined();
 
-        const legacyOutbounds = result.outbounds.filter(outbound => LEGACY_SPECIAL_OUTBOUNDS.includes(outbound.type));
+        const legacyOutbounds = result.outbounds.filter(outbound => ['block', 'dns'].includes(outbound.type));
         expect(legacyOutbounds).toEqual([]);
         expect(result.outbounds.flatMap(outbound => outbound.outbounds || [])).not.toContain('REJECT');
     });
@@ -167,9 +116,9 @@ describe('sing-box 1.13+ compatibility: no legacy inbound fields', () => {
         expect(result.outbounds.some(outbound => outbound.tag === '🛑 广告拦截')).toBe(false);
     });
 
-    it('built config (v1.13) should have correct DNS format', async () => {
+    it('built config should have correct DNS format', async () => {
         const builder = new SingboxConfigBuilder(
-            sampleInput, [], [], null, 'zh-CN', null, false, false, null, null, '1.13'
+            sampleInput, [], [], null, 'zh-CN', null, false
         );
         const result = await builder.build();
 
@@ -179,9 +128,9 @@ describe('sing-box 1.13+ compatibility: no legacy inbound fields', () => {
         expect(result.route).toHaveProperty('default_domain_resolver', 'dns_resolver');
     });
 
-    it('built config (v1.13) should have correct route structure', async () => {
+    it('built config should have correct route structure', async () => {
         const builder = new SingboxConfigBuilder(
-            sampleInput, [], [], null, 'zh-CN', null, false, false, null, null, '1.13'
+            sampleInput, [], [], null, 'zh-CN', null, false
         );
         const result = await builder.build();
 
@@ -191,18 +140,18 @@ describe('sing-box 1.13+ compatibility: no legacy inbound fields', () => {
         expect(result.route.rules.some(r => r.action === 'sniff')).toBe(true);
     });
 
-    it('built config (v1.13) should have ntp configured', async () => {
+    it('built config should have ntp configured', async () => {
         const builder = new SingboxConfigBuilder(
-            sampleInput, [], [], null, 'zh-CN', null, false, false, null, null, '1.13'
+            sampleInput, [], [], null, 'zh-CN', null, false
         );
         const result = await builder.build();
 
         expect(result.ntp).toMatchObject({ enabled: true, server: 'time.apple.com' });
     });
 
-    it('built config (v1.13) should have experimental.cache_file', async () => {
+    it('built config should have experimental.cache_file', async () => {
         const builder = new SingboxConfigBuilder(
-            sampleInput, [], [], null, 'zh-CN', null, false, false, null, null, '1.13'
+            sampleInput, [], [], null, 'zh-CN', null, false
         );
         const result = await builder.build();
 
@@ -210,9 +159,9 @@ describe('sing-box 1.13+ compatibility: no legacy inbound fields', () => {
         expect(result.experimental.cache_file).toMatchObject({ enabled: true, store_fakeip: true });
     });
 
-    it('built config (v1.13) inbound should not contain legacy fields', async () => {
+    it('built config inbound should not contain legacy fields', async () => {
         const builder = new SingboxConfigBuilder(
-            sampleInput, [], [], null, 'zh-CN', null, false, false, null, null, '1.13'
+            sampleInput, [], [], null, 'zh-CN', null, false
         );
         const result = await builder.build();
 
@@ -223,9 +172,9 @@ describe('sing-box 1.13+ compatibility: no legacy inbound fields', () => {
         }
     });
 
-    it('built config (v1.13) should have 6 inbounds with correct tags', async () => {
+    it('built config should have 6 inbounds with correct tags', async () => {
         const builder = new SingboxConfigBuilder(
-            sampleInput, [], [], null, 'zh-CN', null, false, false, null, null, '1.13'
+            sampleInput, [], [], null, 'zh-CN', null, false
         );
         const result = await builder.build();
 

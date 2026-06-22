@@ -16,7 +16,7 @@ import { ShortLinkService } from '../services/shortLinkService.js';
 import { ConfigStorageService } from '../services/configStorageService.js';
 import { ServiceError, MissingDependencyError } from '../services/errors.js';
 import { normalizeRuntime } from '../runtime/runtimeConfig.js';
-import { PREDEFINED_RULE_SETS, SING_BOX_CONFIG, SING_BOX_CONFIG_V1_11, SING_BOX_CONFIG_V1_13, generateSubconverterConfig } from '../config/index.js';
+import { PREDEFINED_RULE_SETS, SING_BOX_CONFIG, generateSubconverterConfig } from '../config/index.js';
 
 const DEFAULT_USER_AGENT = 'curl/7.74.0';
 
@@ -86,18 +86,7 @@ export function createApp(bindings = {}) {
             const configId = c.req.query('configId');
             const lang = c.get('lang');
 
-            const requestedSingboxVersion = c.req.query('singbox_version') || c.req.query('sb_version') || c.req.query('sb_ver');
-            const requestUserAgent = getRequestHeader(c.req, 'User-Agent');
-            const singboxConfigVersion = resolveSingboxConfigVersion(requestedSingboxVersion, requestUserAgent);
-
-            let baseConfig;
-            if (singboxConfigVersion === '1.11') {
-                baseConfig = SING_BOX_CONFIG_V1_11;
-            } else if (singboxConfigVersion === '1.12') {
-                baseConfig = SING_BOX_CONFIG;
-            } else {
-                baseConfig = SING_BOX_CONFIG_V1_13;
-            }
+            let baseConfig = SING_BOX_CONFIG;
             if (configId) {
                 const storage = requireConfigStorage(services.configStorage);
                 const storedConfig = await storage.getConfigById(configId);
@@ -117,7 +106,6 @@ export function createApp(bindings = {}) {
                 enableClashUI,
                 externalController,
                 externalUiDownloadUrl,
-                singboxConfigVersion,
                 includeAutoSelect
             );
             await builder.build();
@@ -450,62 +438,6 @@ function parseJsonArray(raw) {
 
 function parseBooleanFlag(value) {
     return value === 'true' || value === true;
-}
-
-function parseSemverLike(value) {
-    if (typeof value !== 'string') {
-        return null;
-    }
-    const trimmed = value.trim();
-    if (!trimmed) {
-        return null;
-    }
-    const match = trimmed.match(/(\d+)\.(\d+)(?:\.(\d+))?/);
-    if (!match) {
-        return null;
-    }
-    return {
-        major: Number(match[1]),
-        minor: Number(match[2]),
-        patch: match[3] ? Number(match[3]) : 0
-    };
-}
-
-function isSingboxLegacyConfig(version) {
-    if (!version || Number.isNaN(version.major) || Number.isNaN(version.minor)) {
-        return false;
-    }
-    if (version.major !== 1) {
-        return version.major < 1;
-    }
-    return version.minor < 12;
-}
-
-function resolveSingboxConfigVersion(requestedVersion, userAgent) {
-    const normalizedRequested = typeof requestedVersion === 'string' ? requestedVersion.trim().toLowerCase() : '';
-    if (normalizedRequested && normalizedRequested !== 'auto') {
-        if (normalizedRequested === 'legacy') return '1.11';
-        if (normalizedRequested === 'latest') return '1.13';
-        const parsed = parseSemverLike(normalizedRequested);
-        if (parsed) {
-            if (isSingboxLegacyConfig(parsed)) return '1.11';
-            if (parsed.major === 1 && parsed.minor >= 13) return '1.13';
-            return '1.12';
-        }
-    }
-
-    if (typeof userAgent === 'string' && userAgent) {
-        const uaMatch = userAgent.match(/sing-box\/(\d+\.\d+(?:\.\d+)?)/i) || userAgent.match(/sing-box\s+(\d+\.\d+(?:\.\d+)?)/i);
-        const versionString = uaMatch?.[1];
-        const parsed = versionString ? parseSemverLike(versionString) : null;
-        if (parsed) {
-            if (isSingboxLegacyConfig(parsed)) return '1.11';
-            if (parsed.major === 1 && parsed.minor >= 13) return '1.13';
-            return '1.12';
-        }
-    }
-
-    return '1.12';
 }
 
 function getRequestHeader(request, name) {

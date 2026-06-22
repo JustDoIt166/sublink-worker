@@ -53,7 +53,7 @@ export function parseVmess(url) {
         transport = {
             type: 'ws',
             path: vmessConfig.path,
-            headers: { 'host': vmessConfig.host ? vmessConfig.host : vmessConfig.sni }
+            headers: { 'Host': vmessConfig.host ? vmessConfig.host : vmessConfig.sni }
         };
     } else if ((networkType === 'tcp' && transportType === 'http') || networkType === 'http') {
         const method = vmessConfig.method || 'GET';
