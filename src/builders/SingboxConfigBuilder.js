@@ -137,7 +137,7 @@ export class SingboxConfigBuilder extends BaseConfigBuilder {
         // xudp is default in newer versions
         delete sanitized.packet_encoding;
 
-        // sing-box has no xhttp transport (only http/ws/quic/grpc/httpupgrade), and its
+// sing-box has no xhttp transport (only http/ws/quic/grpc/httpupgrade), and its
         // `http` transport is v2ray's obfuscation - a different wire format. Emitting the
         // degraded node produced a proxy that dials fine and then never carries traffic,
         // so drop it instead of shipping a node that cannot work.
@@ -167,6 +167,34 @@ export class SingboxConfigBuilder extends BaseConfigBuilder {
                     }
                 }
             }
+        }
+
+        if (sanitized.type === 'hysteria2') {
+            // sing-box names port-hopping/bandwidth fields differently from the
+            // share-link shape, and rejects unknown fields outright
+            if (sanitized.ports) {
+                const ranges = String(sanitized.ports).split(',')
+                    .map(range => range.trim().replace('-', ':'))
+                    .filter(Boolean);
+                if (ranges.length > 0) {
+                    sanitized.server_ports = ranges;
+                }
+                delete sanitized.ports;
+            }
+            if (typeof sanitized.hop_interval === 'number') {
+                sanitized.hop_interval = `${sanitized.hop_interval}s`;
+            }
+            if (sanitized.up !== undefined) {
+                sanitized.up_mbps = sanitized.up;
+                delete sanitized.up;
+            }
+            if (sanitized.down !== undefined) {
+                sanitized.down_mbps = sanitized.down;
+                delete sanitized.down;
+            }
+            delete sanitized.auth;
+            delete sanitized.recv_window_conn;
+            delete sanitized.fast_open;
         }
 
         return sanitized;
