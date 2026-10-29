@@ -12,6 +12,15 @@ const ANYTLS_OPTION_KEYS = {
     'min-idle-session': 'min_idle_session'
 };
 
+function isDirectDnsServer(server, outbounds = []) {
+    if (!server?.tag || server.type === 'fakeip') return false;
+    if (!server.detour) return true;
+
+    // A detour is proxy-independent only when its actual target is direct.
+    const target = outbounds.find(outbound => outbound?.tag === server.detour);
+    return target?.type === 'direct' && !target.detour;
+}
+
 export class SingboxConfigBuilder extends BaseConfigBuilder {
     constructor(inputString, selectedRules, customRules, baseConfig, lang, userAgent, groupByCountry = false, enableClashUI = false, externalController, externalUiDownloadUrl, includeAutoSelect = true) {
         const resolvedBaseConfig = baseConfig ?? SING_BOX_CONFIG;
@@ -577,6 +586,22 @@ export class SingboxConfigBuilder extends BaseConfigBuilder {
     formatConfig() {
         const rules = generateRules(this.selectedRules, this.customRules);
         const { site_rule_sets, ip_rule_sets } = generateRuleSets(this.selectedRules, this.customRules);
+
+        // A subscription-supplied route may drop these fields entirely.
+        this.config.route ??= {};
+        this.config.route.rules ??= [];
+
+        // Resolving a node's own hostname through a detour that points at that
+        // node never terminates, so bootstrap must stay on a direct resolver
+        // even after a subscription route override drops the default.
+        if (!this.config.route.default_domain_resolver) {
+            const bootstrapResolver = (this.config.dns?.servers || []).find(server =>
+                server?.tag === 'dns_resolver' && isDirectDnsServer(server, this.config.outbounds)
+            );
+            if (bootstrapResolver) {
+                this.config.route.default_domain_resolver = bootstrapResolver.tag;
+            }
+        }
 
         this.config.route.rule_set = [...site_rule_sets, ...ip_rule_sets];
         this.configureRuleSetDownload();

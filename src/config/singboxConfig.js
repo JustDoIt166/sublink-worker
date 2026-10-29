@@ -32,6 +32,26 @@ export const SING_BOX_CONFIG = JSON.parse(JSON.stringify({
 			}
 		],
 		rules: [
+			// Direct mode must not depend on a proxy node for DNS resolution.
+			{
+				clash_mode: "direct",
+				query_type: [
+					"A",
+					"AAAA",
+					"CNAME"
+				],
+				server: "dns_direct"
+			},
+			{
+				rule_set: ["geolocation-cn", "cn"],
+				query_type: [
+					"A",
+					"AAAA",
+					"CNAME"
+				],
+				server: "dns_direct"
+			},
+			// Unclassified domains need real IPs so private/custom CIDR routing can match.
 			{
 				rule_set: "geolocation-!cn",
 				query_type: [
@@ -41,8 +61,7 @@ export const SING_BOX_CONFIG = JSON.parse(JSON.stringify({
 				server: "dns_fakeip"
 			},
 			{
-				rule_set: "geolocation-!cn",
-				query_type: "CNAME",
+				query_type: ["A", "AAAA", "CNAME"],
 				server: "dns_proxy"
 			},
 			{
