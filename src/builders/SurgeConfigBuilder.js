@@ -4,6 +4,19 @@ import { SURGE_CONFIG, SURGE_SITE_RULE_SET_BASEURL, SURGE_IP_RULE_SET_BASEURL, g
 import { addProxyWithDedup } from './helpers/proxyHelpers.js';
 import { buildSelectorMembers, buildNodeSelectMembers, buildCustomRuleMembers, uniqueNames } from './helpers/groupBuilder.js';
 
+// Surge speaks ws/grpc only; xhttp, h2 and v2ray's legacy http obfuscation have
+// no Surge equivalent. Emitting them anyway produced a proxy line that silently
+// never connects, so they are commented out like any other unsupported type.
+const SURGE_UNSUPPORTED_TRANSPORTS = new Set(['xhttp', 'h2', 'http']);
+
+function isSurgeUnsupportedTransport(transport) {
+    return !!transport?.type && SURGE_UNSUPPORTED_TRANSPORTS.has(transport.type);
+}
+
+function unsupportedSurgeProxy(proxy, transport) {
+    return `# ${proxy.tag} - Unsupported transport for ${proxy.type}: ${transport.type}`;
+}
+
 export class SurgeConfigBuilder extends BaseConfigBuilder {
     constructor(inputString, selectedRules, customRules, baseConfig, lang, userAgent, groupByCountry, includeAutoSelect = true) {
         const resolvedBaseConfig = baseConfig ?? SURGE_CONFIG;
@@ -76,6 +89,8 @@ export class SurgeConfigBuilder extends BaseConfigBuilder {
                     }
                 } else if (proxy.transport?.type === 'grpc') {
                     surgeProxy += `, grpc-service-name=${proxy.transport.service_name}`;
+                } else if (isSurgeUnsupportedTransport(proxy.transport)) {
+                    surgeProxy = unsupportedSurgeProxy(proxy, proxy.transport);
                 }
                 break;
             case 'trojan':
@@ -96,6 +111,8 @@ export class SurgeConfigBuilder extends BaseConfigBuilder {
                     }
                 } else if (proxy.transport?.type === 'grpc') {
                     surgeProxy += `, grpc-service-name=${proxy.transport.service_name}`;
+                } else if (isSurgeUnsupportedTransport(proxy.transport)) {
+                    surgeProxy = unsupportedSurgeProxy(proxy, proxy.transport);
                 }
                 break;
             case 'hysteria2':

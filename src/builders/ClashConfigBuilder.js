@@ -47,6 +47,29 @@ function getClashUdpValue(proxy, defaultEnabled = true) {
     return defaultEnabled;
 }
 
+/**
+ * Build mihomo `xhttp-opts` from a parsed xhttp transport.
+ * mihomo keys the transport entirely off `network: xhttp` + `xhttp-opts`; without
+ * this block the node degrades to a plain-TCP dial. `auto` is Xray's own default
+ * and is spelled out because mihomo wants an explicit mode.
+ * @param {object} transport - { type: 'xhttp', path, host, mode }
+ * @returns {object|undefined}
+ */
+function buildXhttpOpts(transport) {
+    if (transport?.type !== 'xhttp') return undefined;
+    const opts = {
+        path: transport.path || '/',
+        mode: transport.mode || 'auto'
+    };
+    if (transport.host) {
+        opts.host = transport.host;
+    }
+    if (transport.headers && Object.keys(transport.headers).length > 0) {
+        opts.headers = transport.headers;
+    }
+    return opts;
+}
+
 export class ClashConfigBuilder extends BaseConfigBuilder {
     constructor(inputString, selectedRules, customRules, baseConfig, lang, userAgent, groupByCountry = false, enableClashUI = false, externalController, externalUiDownloadUrl, includeAutoSelect = true) {
         if (!baseConfig) {
@@ -184,6 +207,7 @@ export class ClashConfigBuilder extends BaseConfigBuilder {
                             host: proxy.transport.host
                         }
                         : undefined,
+                    'xhttp-opts': buildXhttpOpts(proxy.transport),
                     udp: getClashUdpValue(proxy)
                 };
             case 'vless':
@@ -209,6 +233,7 @@ export class ClashConfigBuilder extends BaseConfigBuilder {
                     'grpc-opts': proxy.transport?.type === 'grpc' ? {
                         'grpc-service-name': proxy.transport.service_name,
                     } : undefined,
+                    'xhttp-opts': buildXhttpOpts(proxy.transport),
                     tfo: proxy.tcp_fast_open,
                     'skip-cert-verify': !!proxy.tls?.insecure,
                     udp: getClashUdpValue(proxy),
@@ -259,6 +284,7 @@ export class ClashConfigBuilder extends BaseConfigBuilder {
                     'grpc-opts': proxy.transport?.type === 'grpc' ? {
                         'grpc-service-name': proxy.transport.service_name,
                     } : undefined,
+                    'xhttp-opts': buildXhttpOpts(proxy.transport),
                     tfo: proxy.tcp_fast_open,
                     'skip-cert-verify': !!proxy.tls?.insecure,
                     ...(proxy.alpn ? { alpn: proxy.alpn } : {}),

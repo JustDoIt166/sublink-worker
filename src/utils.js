@@ -329,8 +329,26 @@ export function createTlsConfig(params, transportType) {
 	return tls;
 }
 
+// xhttp modes mihomo accepts; anything else falls back to `auto`, which is also
+// Xray's own default when the link omits `mode`.
+const XHTTP_MODES = new Set(['auto', 'packet-up', 'stream-up', 'stream-one']);
+
 export function createTransportConfig(params) {
-	const type = params.type === 'xhttp' ? 'http' : params.type;
+	const rawType = typeof params.type === 'string' ? params.type.trim().toLowerCase() : params.type;
+	// xhttp (Xray's splithttp) is its own transport, not the legacy HTTP
+	// obfuscation. Folding it into `http` dropped path/host/mode and produced a
+	// `network: http` node that cannot connect to an xhttp-only server.
+	const type = rawType === 'xhttp' ? 'xhttp' : rawType;
+
+	if (type === 'xhttp') {
+		const mode = typeof params.mode === 'string' ? params.mode.trim().toLowerCase() : '';
+		return {
+			type,
+			path: params.path ?? undefined,
+			host: params.host ?? undefined,
+			mode: XHTTP_MODES.has(mode) ? mode : 'auto',
+		};
+	}
 
 	const config = {
 		type,

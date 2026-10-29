@@ -422,7 +422,12 @@ describe('Sing-Box schema validation with real subscription data', () => {
             expect(json).toHaveProperty('inbounds');
 
             expect(json.outbounds.length).toBeGreaterThan(1);
-            expect(getProxies(json).length).toBe(9);
+            // The fixture carries 9 links, 3 of them xhttp. sing-box has no xhttp
+            // transport, and its `http` transport is v2ray obfuscation - a different
+            // wire format - so those nodes are dropped rather than re-emitted as a
+            // proxy that dials and then never carries traffic.
+            expect(getProxies(json).length).toBe(6);
+            expect(getProxies(json).some(p => p.tag?.endsWith("-xhttp"))).toBe(false);
         });
 
         it('GET /singbox with real subscription and v1.13 should produce correct DNS format', async () => {

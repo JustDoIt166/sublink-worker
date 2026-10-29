@@ -113,6 +113,14 @@ export class SingboxConfigBuilder extends BaseConfigBuilder {
         // xudp is default in newer versions
         delete sanitized.packet_encoding;
 
+        // sing-box has no xhttp transport (only http/ws/quic/grpc/httpupgrade), and its
+        // `http` transport is v2ray's obfuscation - a different wire format. Emitting the
+        // degraded node produced a proxy that dials fine and then never carries traffic,
+        // so drop it instead of shipping a node that cannot work.
+        if (sanitized.transport?.type === "xhttp") {
+            return null;
+        }
+
         // Extract early data from WS transport path (?ed=NUMBER → max_early_data + early_data_header_name)
         if (sanitized.transport?.type === 'ws' && sanitized.transport?.path) {
             const qIndex = sanitized.transport.path.indexOf('?');
