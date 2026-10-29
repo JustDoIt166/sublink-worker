@@ -36,6 +36,34 @@ describe('Worker', () => {
         expect(json).toHaveProperty('outbounds');
     });
 
+    it('GET /singbox ignores a Clash base config ID', async () => {
+        const kv = new MemoryKVAdapter();
+        await kv.put('clash_test', JSON.stringify({
+            'proxy-groups': [{ name: 'Custom', type: 'select', proxies: ['DIRECT'] }]
+        }));
+        const app = createTestApp({ kv });
+        const config = 'vmess://ew0KICAidiI6ICIyIiwNCiAgInBzIjogInRlc3QiLA0KICAiYWRkIjogIjEuMS4xLjEiLA0KICAicG9ydCI6ICI0NDMiLA0KICAiaWQiOiAiYWRkNjY2NjYtODg4OC04ODg4LTg4ODgtODg4ODg4ODg4ODg4IiwNCiAgImFpZCI6ICIwIiwNCiAgInNjeSI6ICJhdXRvIiwNCiAgIm5ldCI6ICJ3cyIsDQogICJ0eXBlIjogIm5vbmUiLA0KICAiaG9zdCI6ICIiLA0KICAicGF0aCI6ICIvIiwNCiAgInRscyI6ICJ0bHMiDQp9';
+        const res = await app.request(`http://localhost/singbox?config=${encodeURIComponent(config)}&configId=clash_test`);
+
+        expect(res.status).toBe(200);
+        const json = await res.json();
+        expect(json).toHaveProperty('outbounds');
+        expect(json).not.toHaveProperty('proxy-groups');
+    });
+
+    it('GET /clash ignores a singbox base config ID', async () => {
+        const kv = new MemoryKVAdapter();
+        await kv.put('singbox_test', JSON.stringify({ outbounds: [{ type: 'direct', tag: 'DIRECT' }] }));
+        const app = createTestApp({ kv });
+        const config = 'vmess://ew0KICAidiI6ICIyIiwNCiAgInBzIjogInRlc3QiLA0KICAiYWRkIjogIjEuMS4xLjEiLA0KICAicG9ydCI6ICI0NDMiLA0KICAiaWQiOiAiYWRkNjY2NjYtODg4OC04ODg4LTg4ODgtODg4ODg4ODg4ODg4IiwNCiAgImFpZCI6ICIwIiwNCiAgInNjeSI6ICJhdXRvIiwNCiAgIm5ldCI6ICJ3cyIsDQogICJ0eXBlIjogIm5vbmUiLA0KICAiaG9zdCI6ICIiLA0KICAicGF0aCI6ICIvIiwNCiAgInRscyI6ICJ0bHMiDQp9';
+        const res = await app.request(`http://localhost/clash?config=${encodeURIComponent(config)}&configId=singbox_test`);
+
+        expect(res.status).toBe(200);
+        const text = await res.text();
+        expect(text).toContain('proxies:');
+        expect(text).not.toContain('outbounds');
+    });
+
     it('GET /singbox works with any UA (v1.12, v1.11 all produce same format)', async () => {
         const app = createTestApp();
         const config = 'vmess://ew0KICAidiI6ICIyIiwNCiAgInBzIjogInRlc3QiLA0KICAiYWRkIjogIjEuMS4xLjEiLA0KICAicG9ydCI6ICI0NDMiLA0KICAiaWQiOiAiYWRkNjY2NjYtODg4OC04ODg4LTg4ODgtODg4ODg4ODg4ODg4IiwNCiAgImFpZCI6ICIwIiwNCiAgInNjeSI6ICJhdXRvIiwNCiAgIm5ldCI6ICJ3cyIsDQogICJ0eXBlIjogIm5vbmUiLA0KICAiaG9zdCI6ICIiLA0KICAicGF0aCI6ICIvIiwNCiAgInRscyI6ICJ0bHMiDQp9';

@@ -87,7 +87,8 @@ export function createApp(bindings = {}) {
             const lang = c.get('lang');
 
             let baseConfig = SING_BOX_CONFIG;
-            if (configId) {
+            // A config saved for one output format must not be loaded as another's base config.
+            if (configId?.startsWith('singbox_')) {
                 const storage = requireConfigStorage(services.configStorage);
                 const storedConfig = await storage.getConfigById(configId);
                 if (storedConfig) {
@@ -138,7 +139,7 @@ export function createApp(bindings = {}) {
             const lang = c.get('lang');
 
             let baseConfig;
-            if (configId) {
+            if (configId?.startsWith('clash_')) {
                 const storage = requireConfigStorage(services.configStorage);
                 baseConfig = await storage.getConfigById(configId);
             }
@@ -184,7 +185,7 @@ export function createApp(bindings = {}) {
             const lang = c.get('lang');
 
             let baseConfig;
-            if (configId) {
+            if (configId?.startsWith('surge_')) {
                 const storage = requireConfigStorage(services.configStorage);
                 baseConfig = await storage.getConfigById(configId);
             }
