@@ -560,11 +560,26 @@ export class SingboxConfigBuilder extends BaseConfigBuilder {
         return { outbound: this.t(`outboundNames.${rule.outbound}`) };
     }
 
+    /**
+     * Pin remote rule-set downloads to DIRECT so fetching never depends on a
+     * proxy that may not be up yet. download_detour is accepted by every
+     * sing-box this fork targets (1.12-1.15) and only removed in 1.16, so a
+     * single unconditional path beats a version tier we no longer keep.
+     */
+    configureRuleSetDownload() {
+        (this.config.route.rule_set || []).forEach(ruleSet => {
+            if (ruleSet?.type === 'remote' && !ruleSet.download_detour) {
+                ruleSet.download_detour = 'DIRECT';
+            }
+        });
+    }
+
     formatConfig() {
         const rules = generateRules(this.selectedRules, this.customRules);
         const { site_rule_sets, ip_rule_sets } = generateRuleSets(this.selectedRules, this.customRules);
 
         this.config.route.rule_set = [...site_rule_sets, ...ip_rule_sets];
+        this.configureRuleSetDownload();
 
         // Add outbound_providers if we have any
         if (this.providerUrls.length > 0) {
