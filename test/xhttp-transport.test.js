@@ -4,6 +4,7 @@ import { createTransportConfig } from '../src/utils.js';
 import { ClashConfigBuilder } from '../src/builders/ClashConfigBuilder.js';
 import { SingboxConfigBuilder } from '../src/builders/SingboxConfigBuilder.js';
 import { SurgeConfigBuilder } from '../src/builders/SurgeConfigBuilder.js';
+import { parseClashYaml } from '../src/parsers/subscription/subscriptionContentParser.js';
 
 /**
  * xhttp is Xray's splithttp transport, not the legacy "HTTP obfuscation" that
@@ -104,5 +105,51 @@ describe('Surge output: xhttp', () => {
 
         expect(proxySection).toContain('# trojan-xhttp-node - Unsupported transport for trojan: xhttp');
         expect(proxySection).not.toContain('trojan-xhttp-node = trojan');
+    });
+});
+
+describe('Clash input: xhttp', () => {
+    // A converted subscription can be fed back in as Clash YAML; without the
+    // parser branch the transport fell back to `tcp` and the node quietly broke.
+    const CLASH_XHTTP_INPUT = `proxies:
+  - name: hk-xhttp
+    type: vless
+    server: edge.example.com
+    port: 443
+    uuid: 11111111-1111-1111-1111-111111111111
+    tls: true
+    servername: edge.example.com
+    network: xhttp
+    xhttp-opts:
+      path: /uuid/xhttp?wk=HK
+      mode: stream-one
+      host: edge.example.com
+`;
+
+    it('round-trips network/xhttp-opts back into an xhttp transport', () => {
+        const result = parseClashYaml(CLASH_XHTTP_INPUT);
+        const proxy = result.proxies[0];
+
+        expect(proxy.network).toBe('xhttp');
+        expect(proxy.transport).toEqual({
+            type: 'xhttp',
+            path: '/uuid/xhttp?wk=HK',
+            host: 'edge.example.com',
+            mode: 'stream-one'
+        });
+    });
+
+    it('keeps the node working after a Clash -> Clash conversion', async () => {
+        const config = yaml.load(
+            await new ClashConfigBuilder(CLASH_XHTTP_INPUT, 'minimal', [], null, 'zh-CN', 'clash-verge').build()
+        );
+        const proxy = config.proxies.find(p => p.name === 'hk-xhttp');
+
+        expect(proxy.network).toBe('xhttp');
+        expect(proxy['xhttp-opts']).toEqual({
+            path: '/uuid/xhttp?wk=HK',
+            mode: 'stream-one',
+            host: 'edge.example.com'
+        });
     });
 });

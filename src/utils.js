@@ -333,6 +333,28 @@ export function createTlsConfig(params, transportType) {
 // Xray's own default when the link omits `mode`.
 const XHTTP_MODES = new Set(['auto', 'packet-up', 'stream-up', 'stream-one']);
 
+/**
+ * Normalize an xhttp transport into the `{ type, path, host, mode }` shape the
+ * builders consume.
+ * Both parsers (share link and Clash YAML) feed the same downstream code, so the
+ * mode whitelist lives here instead of being duplicated per entry point.
+ * @param {{path?: string, host?: string, mode?: string, headers?: object}} fields
+ * @returns {{type: string, path: string|undefined, host: string|undefined, mode: string, headers?: object}}
+ */
+export function buildXhttpTransport(fields = {}) {
+	const normalizedMode = typeof fields.mode === 'string' ? fields.mode.trim().toLowerCase() : '';
+	const transport = {
+		type: 'xhttp',
+		path: fields.path ?? undefined,
+		host: fields.host ?? undefined,
+		mode: XHTTP_MODES.has(normalizedMode) ? normalizedMode : 'auto',
+	};
+	if (fields.headers && Object.keys(fields.headers).length > 0) {
+		transport.headers = fields.headers;
+	}
+	return transport;
+}
+
 export function createTransportConfig(params) {
 	const rawType = typeof params.type === 'string' ? params.type.trim().toLowerCase() : params.type;
 	// xhttp (Xray's splithttp) is its own transport, not the legacy HTTP
@@ -341,13 +363,7 @@ export function createTransportConfig(params) {
 	const type = rawType === 'xhttp' ? 'xhttp' : rawType;
 
 	if (type === 'xhttp') {
-		const mode = typeof params.mode === 'string' ? params.mode.trim().toLowerCase() : '';
-		return {
-			type,
-			path: params.path ?? undefined,
-			host: params.host ?? undefined,
-			mode: XHTTP_MODES.has(mode) ? mode : 'auto',
-		};
+		return buildXhttpTransport(params);
 	}
 
 	const config = {

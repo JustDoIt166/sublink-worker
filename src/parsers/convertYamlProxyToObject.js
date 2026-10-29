@@ -1,3 +1,22 @@
+import { buildXhttpTransport } from '../utils.js';
+
+// Clash spells xhttp as `network: xhttp` + `xhttp-opts`. Rebuild the transport
+// shape the builders expect, otherwise a Clash-input subscription degrades the
+// node to `network: tcp` and it silently stops working.
+function xhttpTransportFromClashOpts(opts = {}) {
+    const headers = opts.headers && typeof opts.headers === 'object' ? { ...opts.headers } : undefined;
+    let host = opts.host;
+    if (!host && headers) {
+        host = headers.Host ?? headers.host;
+    }
+    // Host travels in its own field; leaving it in headers would emit it twice.
+    if (host && headers) {
+        delete headers.Host;
+        delete headers.host;
+    }
+    return buildXhttpTransport({ path: opts.path, host, mode: opts.mode, headers });
+}
+
 export function convertYamlProxyToObject(p) {
     if (!p || typeof p !== 'object' || !p.type) return null;
     const type = String(p.type).toLowerCase();
@@ -48,6 +67,9 @@ export function convertYamlProxyToObject(p) {
                 if (net === 'h2') {
                     const h2 = p['h2-opts'] || {};
                     return { type: 'h2', path: h2.path, host: h2.host };
+                }
+                if (net === 'xhttp') {
+                    return xhttpTransportFromClashOpts(p['xhttp-opts']);
                 }
                 return undefined;
             })();
@@ -105,6 +127,9 @@ export function convertYamlProxyToObject(p) {
                     const h2 = p['h2-opts'] || {};
                     return { type: 'h2', path: h2.path, host: h2.host };
                 }
+                if (net === 'xhttp') {
+                    return xhttpTransportFromClashOpts(p['xhttp-opts']);
+                }
                 return undefined;
             })();
             return {
@@ -159,6 +184,9 @@ export function convertYamlProxyToObject(p) {
                 if (net === 'h2') {
                     const h2 = p['h2-opts'] || {};
                     return { type: 'h2', path: h2.path, host: h2.host };
+                }
+                if (net === 'xhttp') {
+                    return xhttpTransportFromClashOpts(p['xhttp-opts']);
                 }
                 return undefined;
             })();
