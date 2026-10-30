@@ -20,6 +20,7 @@ Sublink Worker 是多平台代理订阅转换器：将各类协议（ShadowSocks
 - `npx vitest test/<file>.test.js` — 跑单个测试文件
 - `npm run build` — Vercel 构建（输出到 `dist/vercel/`）
 - `npm run deploy` — `setup-kv` + `wrangler deploy`
+- `npx npm@10.9.2 install` — 改动依赖时只能用这个；锁文件必须由 npm 10 生成（见 `package.json` 的 `packageManager`），npm 11 会漏写 `@emnapi/*` 可选 peer 依赖，导致线上 `npm ci` 校验失败
 
 无 ESLint/Prettier/Biome 配置，未启用自动格式化。
 
